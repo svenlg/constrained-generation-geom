@@ -253,3 +253,4 @@ class GeomDataModule(pl.LightningDataModule):
             self.val_dataset.finalize_cache()
         if hasattr(self, 'test_dataset'):
             self.test_dataset.finalize_cache()
+

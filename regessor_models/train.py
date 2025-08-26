@@ -123,3 +123,8 @@ if __name__ == "__main__":
     parser.add_argument("--max_epochs", type=int, default=100, help="Maximum epochs")
     parser.add_argument("--min_atoms", type=int, default=20, help="Minimum number of atoms")
     parser.add_argument("--max_atoms", type=int, default=75, help="Maximum number of atoms")
+    
+    args = parser.parse_args()
+    
+    train_gnn(**vars(args))
+

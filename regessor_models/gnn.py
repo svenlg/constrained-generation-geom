@@ -72,3 +72,4 @@ class ResBlock(Module):
         h = F.silu(h)
 
         return h + self.skip(x)
+
