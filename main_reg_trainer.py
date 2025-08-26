@@ -13,9 +13,6 @@ from torch.nn.utils import clip_grad_norm_
 from torch_geometric.loader import DataLoader
 from torch.optim.lr_scheduler import SequentialLR, LinearLR, ExponentialLR
 
-from PAMNet.models import PAMNet, PAMNet_s, Config
-from PAMNet.utils.ema import EMA
-from dataset.QM9 import QM9
 
 def args_parser():
     parser = argparse.ArgumentParser(description='PAMNet Training')
