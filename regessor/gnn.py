@@ -1,14 +1,11 @@
-from typing import Optional
-
 import torch
 import torch.nn as nn
 from torch import Tensor
-from torch.nn import Module
 import torch.nn.functional as F
 import dgl
 
 
-class GNN(Module):
+class GNN(nn.Module):
     def __init__(self, node_feats: int, edge_feats: int, hidden_dim=256, depth=6):
         super().__init__()
 
@@ -51,7 +48,7 @@ class GNN(Module):
             return self.head(h)
 
 
-class ResBlock(Module):
+class ResBlock(nn.Module):
     def __init__(self, in_dim: int, out_dim: int):
         super().__init__()
         self.conv1 = dgl.nn.GraphConv(in_dim, out_dim)

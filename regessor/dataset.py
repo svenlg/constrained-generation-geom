@@ -10,7 +10,7 @@ import dgl
 from dgl.dataloading import GraphDataLoader
 import numpy as np
 
-from xtb_calculator import XTBCalculator
+from reg_data_generation.xtb_calculator_calculator import XTBCalculator
 
 
 class GeomDataset(Dataset):
@@ -50,7 +50,6 @@ class GeomDataset(Dataset):
     
     def _load_and_filter_data(self) -> List[Dict]:
         """Load GEOM data and filter by atom count."""
-        # Adjust path for your data structure: data/train_data.pickle, etc.
         split_path = os.path.join(self.data_path, f"{self.split}_data.pickle")
         
         if not os.path.exists(split_path):
