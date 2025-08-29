@@ -1,5 +1,7 @@
+import sys
 import pickle
 import gzip
+import time
 import argparse
 import pandas as pd
 from pathlib import Path
@@ -62,7 +64,7 @@ def sampling_and_processing(
             mol.g.ndata.pop(tmp, None)
         for tmp in REMOVE_EDGE_KEYS:
             mol.g.edata.pop(tmp, None)
-        mol.g.to('cpu')
+        mol.g = mol.g.to('cpu')
         clean_mols.append(mol)
 
     return rd_mols, clean_mols
@@ -72,7 +74,7 @@ def main(args):
     # Setup - Seed and device and root directory
     seed_everything(args.seed)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    experiment = f"{args.experiment}_{args.n_samples}_{datetime.now().strftime('%m%d_%H%M')}"
+    experiment = f"{datetime.now().strftime('%m%d_%H%M')}_{args.experiment}_{args.n_samples}"
     root_dir = Path(args.root) / Path(experiment)
     root_dir.mkdir(parents=True, exist_ok=True)
     mol_dir = root_dir / Path("molecules")
@@ -85,10 +87,11 @@ def main(args):
 
     data_rows = []
 
-    with tqdm(range(epochs), desc="Sampling Progress", dynamic_ncols=True) as pbar:
+    with tqdm(range(epochs), desc="Sampling Progress", dynamic_ncols=True, file=sys.stdout) as pbar:
         for i in pbar:
-    
+            print("", flush=True)
             # Generate Samples
+            tmp_time = time.time()
             rd_mols, clean_mols = sampling_and_processing(
                 gen_model,
                 args.batch_size,
@@ -97,9 +100,11 @@ def main(args):
                 args.max_atoms,
                 device=device
             )
+            print(f"Sampling time: {time.time() - tmp_time:.2f} seconds", flush=True)
 
             ######
             # Get PoseBusters Feedback
+            tmp_time = time.time()
             buster = PoseBusters(config="mol")
             df_scores = buster.bust(rd_mols)
             df_scores = df_scores.reset_index(drop=True)
@@ -107,13 +112,16 @@ def main(args):
             # Make Scores
             scores = posebusters_score(df_scores)
             df_scores['score'] = scores.to_numpy()
+            print(f"PoseBusters time: {time.time() - tmp_time:.2f} seconds", flush=True)
 
             ######
             # XTB-Calulations
+            tmp_time = time.time()
             properties = []
             for tmp_mol in rd_mols:
                 rtn_dict = compute_xtb(tmp_mol, "rdkit")
                 properties.append(rtn_dict)
+            print(f"XTB time: {time.time() - tmp_time:.2f} seconds", flush=True)
 
             df_props = pd.DataFrame.from_records(properties)
             df = pd.concat([df_scores, df_props], axis=1)
@@ -123,7 +131,7 @@ def main(args):
 
             for k, mol in enumerate(clean_mols):
                 mum = i * args.batch_size + k
-                path = mol_dir / Path(f"mol_{mum}.pkl.gz")
+                path = mol_dir / Path(f"mol_{zero_pad(mum)}.pkl.gz")
                 dump_pickle(path, mol)
 
     df = pd.DataFrame.from_records(data_rows)
@@ -135,9 +143,9 @@ def parse_args():
     # Settings
     parser.add_argument("--root", type=str, default="data",
                         help="Path to config file")
-    parser.add_argument("--experiment", type=str, default="data_gen",
+    parser.add_argument("--experiment", type=str, default="gen_data",
                         help="Name of the experiment")
-    parser.add_argument('--seed', type=int, default=42,
+    parser.add_argument('--seed', type=int, default=0,
                         help='Random seed for initialization')
     # FlowMol arguments
     flowmol_choices = ['geom_ctmc', 'geom_gaussian']
@@ -166,5 +174,8 @@ if __name__ == "__main__":
     if args.debug:
         args.n_samples = 10
         args.batch_size = 5
+    # start time
+    start_time = time.time()
     main(args)
+    print(f"Total time taken: {time.time() - start_time:.2f} seconds", flush=True)
 

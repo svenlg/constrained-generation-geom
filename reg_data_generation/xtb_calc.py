@@ -111,7 +111,7 @@ def compute_xtb(molecule, format_type):
         A dictionary containing the computed quantities.
     """
     # Convert molecule to XYZ file
-    xyz_file = "temp_molecule.xyz"
+    xyz_file = "molecule.xyz"
     molecule_to_xyz(molecule, format_type, xyz_file)
 
     # Run xtb and compute the quantity
