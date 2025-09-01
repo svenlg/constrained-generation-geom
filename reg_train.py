@@ -66,8 +66,10 @@ def train_gnn(
     )
     
     # Callbacks
+    ckpt_dir = f"pretrained_models/{experiment}/checkpoints/"
     callbacks = [
         ModelCheckpoint(
+            dirpath=ckpt_dir,
             monitor='val_loss',
             mode='min',
             save_top_k=3,
@@ -88,8 +90,8 @@ def train_gnn(
         max_epochs=config['max_epochs'],
         logger=wandb_logger if not debug else None,
         callbacks=callbacks,
-        accelerator='cuda:0' if torch.cuda.is_available() else 'cpu',
-        precision=16 if torch.cuda.is_available() else 32,
+        accelerator="gpu" if torch.cuda.is_available() else "cpu",
+        devices=1,
         gradient_clip_val=1.0,
         log_every_n_steps=50,
     )

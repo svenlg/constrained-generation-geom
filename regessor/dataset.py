@@ -43,15 +43,14 @@ class GenDataset(Dataset):
     def _load_mols(self, idx) -> SampledMolecule:
         mol_idx = self.df.iloc[idx]['id_str']
         mol_path = os.path.join(self.mol_path, f"{mol_idx}.bin")
-        mol, aux = dgl.load_graphs(mol_path)
-        return mol
+        mols, aux = dgl.load_graphs(mol_path)
+        return mols[0]
 
     def __len__(self) -> int:
         return len(self.df)
 
     def __getitem__(self, idx: int) -> Tuple[dgl.DGLGraph, torch.Tensor]:
-        mol_data = self._load_mols(idx)
-        mol = mol_data.g
+        mol = self._load_mols(idx)
 
         target_value = torch.tensor(self.df.iloc[idx][self.property_name], dtype=torch.float32)
 
