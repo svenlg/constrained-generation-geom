@@ -5,7 +5,11 @@ from sklearn.model_selection import train_test_split
 # Example: load your DataFrame (replace with your actual data)
 
 def main(args):
-    df_path = f"data/{args.experiment}/results.csv"
+    
+    if args.subset is not None:
+        df_path = f"data/{args.experiment}/results_{args.subset}.csv"
+    else:
+        df_path = f"data/{args.experiment}/results.csv"
     df = pd.read_csv(df_path)
 
     assert args.train + args.val <= 1, "Train and validation proportions must sum to less than or equal to 1"
@@ -19,9 +23,14 @@ def main(args):
     val_df, test_df = train_test_split(temp_df, train_size=val_fraction, random_state=seed, shuffle=True)
 
     # Save them to CSV (without index)
-    train_df.to_csv(f"data/{args.experiment}/train.csv", index=False)
-    val_df.to_csv(f"data/{args.experiment}/val.csv", index=False)
-    test_df.to_csv(f"data/{args.experiment}/test.csv", index=False)
+    if args.subset is not None:
+        train_df.to_csv(f"data/{args.experiment}/train_{args.subset}.csv", index=False)
+        val_df.to_csv(f"data/{args.experiment}/val_{args.subset}.csv", index=False)
+        test_df.to_csv(f"data/{args.experiment}/test_{args.subset}.csv", index=False)
+    else:
+        train_df.to_csv(f"data/{args.experiment}/train.csv", index=False)
+        val_df.to_csv(f"data/{args.experiment}/val.csv", index=False)
+        test_df.to_csv(f"data/{args.experiment}/test.csv", index=False)
 
     print(f"Train: {len(train_df)}, Val: {len(val_df)}, Test: {len(test_df)}")
 
@@ -29,6 +38,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Split dataset into train, val, and test sets")
     parser.add_argument("-e", "--experiment", type=str, required=True,
                         help="experiment to use")
+    parser.add_argument("--sub_set", type=int,
+                        help="sub set to use")
     parser.add_argument("--train", type=float, default=0.8, 
                         help="Proportion of the dataset to include in the train split")
     parser.add_argument("--val", type=float, default=0.1,
