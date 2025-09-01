@@ -38,7 +38,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Split dataset into train, val, and test sets")
     parser.add_argument("-e", "--experiment", type=str, required=True,
                         help="experiment to use")
-    parser.add_argument("--sub_set", type=int,
+    parser.add_argument("--subset", type=int, default=None,
                         help="sub set to use")
     parser.add_argument("--train", type=float, default=0.8, 
                         help="Proportion of the dataset to include in the train split")
