@@ -1,11 +1,11 @@
 import sys
-import pickle
 import gzip
 import time
 import argparse
 import pandas as pd
 from pathlib import Path
 from tqdm import tqdm
+import dgl
 import torch
 from datetime import datetime
 
@@ -24,11 +24,6 @@ logging.getLogger("rdkit").setLevel(logging.CRITICAL)
 
 REMOVE_NODE_KEYS = ['x_0', 'a_0', 'c_0', 'x_1_pred', 'a_1_pred', 'c_1_pred', 'x_1', 'a_1', 'c_1']
 REMOVE_EDGE_KEYS = ['e_0', 'e_1_pred', 'e_1']
-
-# Dump molecule to pickle
-def dump_pickle(path: str, mol):
-    with gzip.open(path, "wb") as f:
-        pickle.dump(mol, f, protocol=pickle.HIGHEST_PROTOCOL)
 
 # Zero-pad a number
 def zero_pad(num: int, width: int=6) -> str:
@@ -64,8 +59,12 @@ def sampling_and_processing(
             mol.g.ndata.pop(tmp, None)
         for tmp in REMOVE_EDGE_KEYS:
             mol.g.edata.pop(tmp, None)
-        mol.g = mol.g.to('cpu')
-        clean_mols.append(mol)
+
+        g = mol.g
+        g = g.to('cpu')
+        for k in list(g.ndata): g.ndata[k] = g.ndata[k].cpu()
+        for k in list(g.edata): g.edata[k] = g.edata[k].cpu()
+        clean_mols.append(g)
 
     return rd_mols, clean_mols
 
@@ -129,10 +128,10 @@ def main(args):
             records = df.to_dict(orient="records")
             data_rows.extend(records)
 
-            for k, mol in enumerate(clean_mols):
+            for k, g in enumerate(clean_mols):
                 mum = i * args.batch_size + k
-                path = mol_dir / Path(f"mol_{zero_pad(mum)}.pkl.gz")
-                dump_pickle(path, mol)
+                path = mol_dir / Path(f"mol_{zero_pad(mum)}.bin")
+                dgl.save_graphs(path, g)
 
             if len(data_rows) % 500 == 0:
                 df = pd.DataFrame.from_records(data_rows)
