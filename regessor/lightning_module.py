@@ -15,6 +15,7 @@ class GNNLightningModule(pl.LightningModule):
 
     def __init__(
         self,
+        property: str,
         node_feats: int = 19,
         edge_feats: int = 5,
         hidden_dim: int = 256,
@@ -29,7 +30,9 @@ class GNNLightningModule(pl.LightningModule):
         self.save_hyperparameters("learning_rate", "weight_decay", "scheduler", "warmup_steps")
 
         # Model
+        self.property = property
         self.model = GNN(
+            property=self.property,
             node_feats=node_feats,
             edge_feats=edge_feats,
             hidden_dim=hidden_dim,
@@ -169,3 +172,4 @@ class GNNLightningModule(pl.LightningModule):
             }
 
         return {"optimizer": optimizer}
+

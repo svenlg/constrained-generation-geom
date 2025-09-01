@@ -26,20 +26,25 @@ class GenDataset(Dataset):
     
     def __init__(
         self, 
+        property: str,
         experiment: str, 
         split: str = "train",
-        property_name: str = "dipole",
     ):
         self.experiment = experiment
         self.split = split
-        self.property_name = property_name
+        if "dipole" in property:
+            self.property = "dipole"
+            if "dipole" != property:
+                self.set_zero_dipole = True
+        else:
+            self.property = property
+
         self.path = f"data/{experiment}"
+        self.mol_path = self.path + "/molecules"
         df = pd.read_csv(f"{self.path}/{self.split}.csv")
         df = df[DATA_FRAME_COLS]
         self.df = df
-        self.mol_path = f"data/{experiment}/molecules"
-        self.property_name = property_name
-    
+
     def _load_mols(self, idx) -> SampledMolecule:
         mol_idx = self.df.iloc[idx]['id_str']
         mol_path = os.path.join(self.mol_path, f"{mol_idx}.bin")
@@ -52,7 +57,9 @@ class GenDataset(Dataset):
     def __getitem__(self, idx: int) -> Tuple[dgl.DGLGraph, torch.Tensor]:
         mol = self._load_mols(idx)
 
-        target_value = torch.tensor(self.df.iloc[idx][self.property_name], dtype=torch.float32)
+        target_value = torch.tensor(self.df.iloc[idx][self.property], dtype=torch.float32)
+        if self.set_zero_dipole:
+            target_value = torch.tensor(0.0, dtype=torch.float32) if self.df.iloc[idx]['score'] >= 0.0 else target_value
 
         return mol, target_value
 
@@ -62,28 +69,28 @@ class GeomDataModule(pl.LightningDataModule):
     def __init__(
         self,
         experiment: str,
-        property_name: str,
+        property: str,
         batch_size: int = 32,
         num_workers: int = 4,
     ):
         super().__init__()
         self.experiment = experiment
-        self.property_name = property_name
+        self.property = property
         self.batch_size = batch_size
         self.num_workers = num_workers
     
     def setup(self, stage: Optional[str] = None) -> None:
         if stage == "fit" or stage is None:
             self.train_dataset = GenDataset(
-                self.experiment, "train", self.property_name
+                self.property, self.experiment, "train",
             )
             self.val_dataset = GenDataset(
-                self.experiment, "val", self.property_name
+                self.property, self.experiment, "val"
             )
         
         if stage == "test" or stage is None:
             self.test_dataset = GenDataset(
-                self.experiment, "test", self.property_name
+                self.property, self.experiment, "test"
             )
     
     def train_dataloader(self) -> DataLoader:

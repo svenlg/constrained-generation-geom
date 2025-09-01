@@ -6,9 +6,10 @@ import dgl
 
 
 class GNN(nn.Module):
-    def __init__(self, node_feats: int, edge_feats: int, hidden_dim=256, depth=6):
+    def __init__(self, property: str, node_feats: int, edge_feats: int, hidden_dim=256, depth=6):
         super().__init__()
 
+        self.property = property
         self.in_conv = dgl.nn.GraphConv(node_feats, hidden_dim)
         self.edge_linear = nn.Linear(edge_feats, hidden_dim)
 
@@ -18,6 +19,16 @@ class GNN(nn.Module):
         self.blocks = nn.ModuleList(blocks)
 
         self.head = nn.Linear(hidden_dim, 1)
+
+        if self.property == "dipole":
+            self.output = nn.ReLU()
+            self.tau = 1.0
+        elif self.property == "score": # score is between 0 and 1
+            self.output = nn.Sigmoid()
+            self.tau = 2.0
+        else:
+            self.output = nn.Identity()
+            self.tau = 1.0
 
         nn.init.zeros_(self.head.weight)
         nn.init.zeros_(self.head.bias)
@@ -45,7 +56,7 @@ class GNN(nn.Module):
 
             g.ndata["h"] = h
             h = dgl.readout_nodes(g, "h", op="mean")
-            return self.head(h)
+            return self.output(self.head(h) / self.tau)
 
 
 class ResBlock(nn.Module):

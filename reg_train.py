@@ -13,7 +13,7 @@ from regessor.lightning_module import GNNLightningModule
 
 def train_gnn(
     experiment: str,
-    property_name: str,
+    property: str,
     project_name: str = "gnn-molecular-property",
     debug: bool = False,
     **trainer_kwargs
@@ -44,7 +44,7 @@ def train_gnn(
     # Data module
     data_module = GeomDataModule(
         experiment=experiment,
-        property_name=property_name,
+        property=property,
         batch_size=config['batch_size'],
         num_workers=config.get('num_workers', 4),
     )
@@ -111,8 +111,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train GNN on GEOM dataset with XTB properties")
     parser.add_argument("-e", "--experiment", type=str, required=True, 
                         help="Path to data folder")
-    parser.add_argument("--property_name", type=str, default="dipole",
-                        help="Property to calculate with XTB (e.g., 'energy', 'homo', 'lumo', 'gap', 'dipole') / or 'score'")
+    parser.add_argument("--property", type=str, default="dipole",
+                        help="Property to calculate with XTB (e.g., 'energy', 'homo', 'lumo', 'gap', 'dipole') or 'score'")
     parser.add_argument("--project_name", type=str, default="gnn-molecular-property", 
                         help="WandB project name")
     parser.add_argument("-bs", "--batch_size", type=int, default=32,
@@ -127,7 +127,6 @@ if __name__ == "__main__":
                         help="Maximum epochs")
     parser.add_argument("--debug", action="store_true", 
                         help="Enable debug mode")
-
     args = parser.parse_args()
     
     train_gnn(**vars(args))

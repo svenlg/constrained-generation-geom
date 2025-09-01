@@ -207,7 +207,6 @@ class EndpointVectorField(nn.Module):
 
                         edge_features = self.edge_updaters[updater_idx](g, node_scalar_features, edge_features, d=d)
 
-            
             # predict final charges and atom type logits
             node_scalar_features = self.node_output_head(node_scalar_features)
             atom_type_logits = node_scalar_features[:, :self.n_atom_types]
@@ -365,7 +364,6 @@ class EndpointVectorField(nn.Module):
                         feat_traj.append(traj_frames[feat][frame_idx][mol_idx])
                     molecule_dict[feat] = torch.stack(feat_traj)
                 reshaped_traj_frames.append(molecule_dict)
-
 
             return g, reshaped_traj_frames
         
