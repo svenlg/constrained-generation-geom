@@ -14,11 +14,14 @@ from regessor.lightning_module import GNNLightningModule
 def train_gnn(
     experiment: str,
     property: str,
-    project_name: str = "gnn-molecular-property",
-    debug: bool = False,
+    use_wandb: bool = False,
+    seed: int = 0,
     **trainer_kwargs
 ) -> None:
     """Main training function."""
+    
+    # Set seeds
+    pl.seed_everything(seed, workers=True)
     
     # Default hyperparameters
     config = {
@@ -33,10 +36,10 @@ def train_gnn(
         **trainer_kwargs
     }
 
-    if not debug:
+    if not use_wandb:
         # Initialize wandb logger
         wandb_logger = WandbLogger(
-            project=project_name,
+            project=f"gnn-molecular-{property}",
             name=experiment,
             config=config
         )
@@ -89,7 +92,7 @@ def train_gnn(
     # Trainer
     trainer = pl.Trainer(
         max_epochs=config['max_epochs'],
-        logger=wandb_logger if not debug else None,
+        logger=wandb_logger if not use_wandb else None,
         callbacks=callbacks,
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
         devices=1,
@@ -104,7 +107,7 @@ def train_gnn(
     trainer.test(model, data_module)
     
     # Finish wandb run
-    if not debug:
+    if not use_wandb:
         wandb.finish()
 
 
@@ -114,8 +117,8 @@ if __name__ == "__main__":
                         help="Path to data folder")
     parser.add_argument("--property", type=str, default="dipole",
                         help="Property to calculate with XTB (e.g., 'energy', 'homo', 'lumo', 'gap', 'dipole', 'dipole_zero') or 'score'")
-    parser.add_argument("--project_name", type=str, default="gnn-molecular-property", 
-                        help="WandB project name")
+    parser.add_argument("--seed", type=int, default=0,
+                        help="Set seed")
     parser.add_argument("-bs", "--batch_size", type=int, default=32,
                         help="Batch size")
     parser.add_argument("-lr", "--learning_rate", type=float, default=1e-3,
@@ -126,8 +129,8 @@ if __name__ == "__main__":
                         help="Number of GNN layers")
     parser.add_argument("-me", "--max_epochs", type=int, default=100,
                         help="Maximum epochs")
-    parser.add_argument("--debug", action="store_true", 
-                        help="Enable debug mode")
+    parser.add_argument("--use_wandb", action="store_true", 
+                        help="use WandB in this run.")
     args = parser.parse_args()
     
     train_gnn(**vars(args))
