@@ -1,3 +1,4 @@
+from datetime import datetime
 import argparse
 from typing import Optional
 
@@ -25,11 +26,11 @@ def train_gnn(
     
     # Default hyperparameters
     config = {
-        'batch_size': 32,
+        'batch_size': 64,
         'learning_rate': 1e-3,
         'weight_decay': 1e-5,
         'hidden_dim': 256,
-        'depth': 6,
+        'depth': 8,
         'max_epochs': 100,
         'scheduler': 'cosine',
         'warmup_steps': 1000,
@@ -40,7 +41,6 @@ def train_gnn(
         # Initialize wandb logger
         wandb_logger = WandbLogger(
             project=f"gnn-molecular-{property}",
-            name=experiment,
             config=config
         )
     
@@ -70,7 +70,7 @@ def train_gnn(
     )
     
     # Callbacks
-    ckpt_dir = f"pretrained_models/{experiment}/checkpoints/"
+    ckpt_dir = f"pretrained_models/{datetime.now().strftime('%m%d_%H%M')}/checkpoints/"
     callbacks = [
         ModelCheckpoint(
             dirpath=ckpt_dir,
@@ -119,13 +119,13 @@ if __name__ == "__main__":
                         help="Property to calculate with XTB (e.g., 'energy', 'homo', 'lumo', 'gap', 'dipole', 'dipole_zero') or 'score'")
     parser.add_argument("--seed", type=int, default=0,
                         help="Set seed")
-    parser.add_argument("-bs", "--batch_size", type=int, default=32,
+    parser.add_argument("-bs", "--batch_size", type=int, default=64,
                         help="Batch size")
     parser.add_argument("-lr", "--learning_rate", type=float, default=1e-3,
                         help="Learning rate")
     parser.add_argument("-hd", "--hidden_dim", type=int, default=256,
                         help="Hidden dimension")
-    parser.add_argument("-d", "--depth", type=int, default=6,
+    parser.add_argument("-d", "--depth", type=int, default=8,
                         help="Number of GNN layers")
     parser.add_argument("-me", "--max_epochs", type=int, default=100,
                         help="Maximum epochs")
