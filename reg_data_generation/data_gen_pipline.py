@@ -176,8 +176,8 @@ if __name__ == "__main__":
     # Parse command line arguments
     args = parse_args()
     if args.debug:
-        args.n_samples = 10
-        args.batch_size = 5
+        args.n_samples = 4
+        args.batch_size = 2
     # start time
     start_time = time.time()
     main(args)

@@ -20,7 +20,8 @@ def extract_dipole(output: str) -> float:
     match = pattern.search(output)
     if not match:
         print("Dipole not found in xTB output", flush=True)
-        return 0.0
+        return 0
+        raise ValueError("Dipole not found in xTB output")
     
     # The last group is the total dipole in Debye
     return float(match.group(4))
@@ -38,17 +39,13 @@ def extract_homo_lumo(output: str) -> tuple:
             lumo = float(line.split()[-2])
         if (homo is not None) and (lumo is not None):
             return lumo - homo, lumo, homo
-    
-    print("HOMO or LUMO not found in xtb output.", flush=True)
-    return 0.0, 0.0, 0.0
+    raise ValueError("HOMO or LUMO not found in xtb output.")
 
 def extract_energy(output: str) -> float:
     for line in output.split("\n"):
-            if "total energy" in line:
-                return float(line.split()[-3])
-    
-    print("Total energy not found in xtb output.", flush=True)
-    return 0.0
+        if "total energy" in line:
+            return float(line.split()[-3])
+    raise ValueError("Total energy not found in xtb output.")
 
 def atomic_symbol(z: int) -> str:
     """Convert atomic number (int) to element symbol (str)."""
