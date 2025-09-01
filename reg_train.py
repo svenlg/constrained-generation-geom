@@ -36,7 +36,7 @@ def train_gnn(
         **trainer_kwargs
     }
 
-    if not use_wandb:
+    if use_wandb:
         # Initialize wandb logger
         wandb_logger = WandbLogger(
             project=f"gnn-molecular-{property}",
@@ -92,7 +92,7 @@ def train_gnn(
     # Trainer
     trainer = pl.Trainer(
         max_epochs=config['max_epochs'],
-        logger=wandb_logger if not use_wandb else None,
+        logger=wandb_logger if use_wandb else None,
         callbacks=callbacks,
         accelerator="gpu" if torch.cuda.is_available() else "cpu",
         devices=1,
@@ -107,7 +107,7 @@ def train_gnn(
     trainer.test(model, data_module)
     
     # Finish wandb run
-    if not use_wandb:
+    if use_wandb:
         wandb.finish()
 
 
