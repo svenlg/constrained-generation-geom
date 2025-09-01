@@ -39,13 +39,18 @@ def extract_homo_lumo(output: str) -> tuple:
             lumo = float(line.split()[-2])
         if (homo is not None) and (lumo is not None):
             return lumo - homo, lumo, homo
-    raise ValueError("HOMO or LUMO not found in xtb output.")
+    if homo is None:
+        print("HOMO not found in xTB output", flush=True)
+    if lumo is None:
+        print("LUMO not found in xTB output", flush=True)
+    return (None, None, None)
 
 def extract_energy(output: str) -> float:
     for line in output.split("\n"):
         if "total energy" in line:
             return float(line.split()[-3])
-    raise ValueError("Total energy not found in xtb output.")
+    print("Total energy not found in xTB output", flush=True)
+    return None
 
 def atomic_symbol(z: int) -> str:
     """Convert atomic number (int) to element symbol (str)."""
