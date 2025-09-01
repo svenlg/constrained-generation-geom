@@ -146,7 +146,7 @@ def main(args):
                 path = mol_dir / Path(f"mol_{zero_pad(mum)}.bin")
                 dgl.save_graphs(str(path), g)
 
-            if len(data_rows) % 500 == 0:
+            if len(data_rows) % (args.batch_size * 5) == 0:
                 df = pd.DataFrame.from_records(data_rows)
                 df["id_str"] = df.index.map(lambda x: f"mol_{zero_pad(x)}")
                 df.to_csv(root_dir / Path(f"results_{len(data_rows)}.csv"), index=False)
