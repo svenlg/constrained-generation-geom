@@ -1,5 +1,5 @@
 import sys
-import gzip
+import copy
 import time
 import argparse
 import pandas as pd
@@ -60,7 +60,7 @@ def sampling_and_processing(
         for tmp in REMOVE_EDGE_KEYS:
             mol.g.edata.pop(tmp, None)
 
-        g = mol.g
+        g = copy.deepcopy(mol.g)
         g = g.to('cpu')
         for k in list(g.ndata): g.ndata[k] = g.ndata[k].cpu()
         for k in list(g.edata): g.edata[k] = g.edata[k].cpu()
