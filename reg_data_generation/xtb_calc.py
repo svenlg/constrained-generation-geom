@@ -137,20 +137,31 @@ def run_xtb(xyz_file):
 
 def compute_xtb(molecule, format_type):
     """
-    Compute homolumo, dipole, and energy for a molecule using xtb
-    in an isolated temporary directory to avoid filename clashes.
+    Compute HOMO-LUMO gap, dipole, and energy for a molecule using xTB.
+    Uses a unique temporary directory based on SLURM job ID (if available),
+    otherwise falls back to the process ID.
     """
-    with tempfile.TemporaryDirectory(prefix=f"xtb_{os.getpid()}_") as tmpdir:
+    # Get identifiers
+    job_id = os.getenv("SLURM_JOB_ID")
+    task_id = os.getenv("SLURM_ARRAY_TASK_ID")
+    pid = os.getpid()
+
+    # Build a prefix for the temp directory
+    if job_id:
+        prefix = f"xtb_{job_id}_{task_id or pid}_"
+    else:
+        prefix = f"xtb_{pid}_"
+
+    with tempfile.TemporaryDirectory(prefix=prefix) as tmpdir:
         xyz_file = os.path.join(tmpdir, "molecule.xyz")
         molecule_to_xyz(molecule, format_type, xyz_file)
 
-        # Run xtb *inside* the temp dir so all its aux files land there
+        # Run xTB inside the temp directory
         result = subprocess.run(
             ["xtb", xyz_file],
             cwd=tmpdir,
             capture_output=True,
             text=True,
-            check=False,  # keep False if you want to parse stdout even on failure
         )
         output = result.stdout
 
@@ -162,5 +173,5 @@ def compute_xtb(molecule, format_type):
         rtn_dict["dipole"] = extract_dipole(output)
         rtn_dict["energy"] = extract_energy(output)
 
-        # No manual cleanup needed; TemporaryDirectory removes everything.
+        # TemporaryDirectory cleans up automatically
         return rtn_dict
