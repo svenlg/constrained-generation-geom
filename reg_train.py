@@ -55,6 +55,7 @@ def train_gnn(
     
     # Model
     model = GNNLightningModule(
+        property=property,
         node_feats=node_feats,
         edge_feats=edge_feats,
         hidden_dim=config['hidden_dim'],
@@ -112,7 +113,7 @@ if __name__ == "__main__":
     parser.add_argument("-e", "--experiment", type=str, required=True, 
                         help="Path to data folder")
     parser.add_argument("--property", type=str, default="dipole",
-                        help="Property to calculate with XTB (e.g., 'energy', 'homo', 'lumo', 'gap', 'dipole') or 'score'")
+                        help="Property to calculate with XTB (e.g., 'energy', 'homo', 'lumo', 'gap', 'dipole', 'dipole_zero') or 'score'")
     parser.add_argument("--project_name", type=str, default="gnn-molecular-property", 
                         help="WandB project name")
     parser.add_argument("-bs", "--batch_size", type=int, default=32,

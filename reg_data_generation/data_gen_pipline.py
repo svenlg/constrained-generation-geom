@@ -29,7 +29,7 @@ ALL_COLS = ['mol_pred_loaded',
             'non-aromatic_ring_non-flatness', 'double_bond_flatness',
             'internal_energy']
 
-COLS_TO_KEEP = ['sanitization', 'inchi_convertible', 'all_atoms_connected', 'internal_energy']
+COLS_TO_KEEP = ['sanitization', 'inchi_convertible', 'all_atoms_connected', 'internal_energy', 'score']
 
 REMOVE_NODE_KEYS = ['x_0', 'a_0', 'c_0', 'x_1_pred', 'a_1_pred', 'c_1_pred', 'x_1', 'a_1', 'c_1']
 REMOVE_EDGE_KEYS = ['e_0', 'e_1_pred', 'e_1']
@@ -119,8 +119,8 @@ def main(args):
 
             # Make Scores
             scores = posebusters_score(df_scores)
-            df_scores['score'] = scores.to_numpy()
             df_scores = df_scores[COLS_TO_KEEP]
+            df_scores['score'] = scores.to_numpy()
             print(f"PoseBusters time: {time.time() - tmp_time:.2f} seconds", flush=True)
 
             ######
