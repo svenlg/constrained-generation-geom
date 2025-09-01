@@ -1,5 +1,7 @@
+import os
 import re
 import torch
+import tempfile
 import subprocess
 from rdkit.Chem import GetPeriodicTable
 
@@ -107,28 +109,58 @@ def run_xtb(xyz_file):
 
     return rtn_dict
 
+# def compute_xtb(molecule, format_type):
+#     """
+#     Compute a homolumo, dipole, and energy for a molecule using xtb.
+
+#     Args:
+#         molecule: The molecule object (RDKit Mol or DGLGraph).
+#         format_type: The format of the molecule ("rdkit" or "dgl").
+#     Returns:
+#         A dictionary containing the computed quantities.
+#     """
+#     # Convert molecule to XYZ file
+#     xyz_file = "molecule.xyz"
+#     molecule_to_xyz(molecule, format_type, xyz_file)
+
+#     # Run xtb and compute the quantity
+#     value = run_xtb(xyz_file)
+
+#     # Clean up temporary file
+#     subprocess.run(["rm", xyz_file])
+#     subprocess.run(["rm", "charges"])
+#     subprocess.run(["rm", "wbo"])
+#     subprocess.run(["rm", "xtbrestart"])
+#     subprocess.run(["rm", "xtbtopo.mol"])
+
+#     return value
+
 def compute_xtb(molecule, format_type):
     """
-    Compute a homolumo, dipole, and energy for a molecule using xtb.
-
-    Args:
-        molecule: The molecule object (RDKit Mol or DGLGraph).
-        format_type: The format of the molecule ("rdkit" or "dgl").
-    Returns:
-        A dictionary containing the computed quantities.
+    Compute homolumo, dipole, and energy for a molecule using xtb
+    in an isolated temporary directory to avoid filename clashes.
     """
-    # Convert molecule to XYZ file
-    xyz_file = "molecule.xyz"
-    molecule_to_xyz(molecule, format_type, xyz_file)
+    with tempfile.TemporaryDirectory(prefix=f"xtb_{os.getpid()}_") as tmpdir:
+        xyz_file = os.path.join(tmpdir, "molecule.xyz")
+        molecule_to_xyz(molecule, format_type, xyz_file)
 
-    # Run xtb and compute the quantity
-    value = run_xtb(xyz_file)
+        # Run xtb *inside* the temp dir so all its aux files land there
+        result = subprocess.run(
+            ["xtb", xyz_file],
+            cwd=tmpdir,
+            capture_output=True,
+            text=True,
+            check=False,  # keep False if you want to parse stdout even on failure
+        )
+        output = result.stdout
 
-    # Clean up temporary file
-    subprocess.run(["rm", xyz_file])
-    subprocess.run(["rm", "charges"])
-    subprocess.run(["rm", "wbo"])
-    subprocess.run(["rm", "xtbrestart"])
-    subprocess.run(["rm", "xtbtopo.mol"])
+        rtn_dict = {}
+        gap, lumo, homo = extract_homo_lumo(output)
+        rtn_dict["homolumo_gap"] = gap
+        rtn_dict["lumo"] = lumo
+        rtn_dict["homo"] = homo
+        rtn_dict["dipole"] = extract_dipole(output)
+        rtn_dict["energy"] = extract_energy(output)
 
-    return value
+        # No manual cleanup needed; TemporaryDirectory removes everything.
+        return rtn_dict
