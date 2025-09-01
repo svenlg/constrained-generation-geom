@@ -131,7 +131,7 @@ def main(args):
             for k, g in enumerate(clean_mols):
                 mum = i * args.batch_size + k
                 path = mol_dir / Path(f"mol_{zero_pad(mum)}.bin")
-                dgl.save_graphs(path, g)
+                dgl.save_graphs(str(path), g)
 
             if len(data_rows) % 500 == 0:
                 df = pd.DataFrame.from_records(data_rows)
@@ -176,8 +176,8 @@ if __name__ == "__main__":
     # Parse command line arguments
     args = parse_args()
     if args.debug:
-        args.n_samples = 4
-        args.batch_size = 2
+        args.n_samples = 10
+        args.batch_size = 5
     # start time
     start_time = time.time()
     main(args)

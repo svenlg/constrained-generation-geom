@@ -15,8 +15,8 @@ class GNNLightningModule(pl.LightningModule):
 
     def __init__(
         self,
-        node_feats: int,
-        edge_feats: int,
+        node_feats: int = 19,
+        edge_feats: int = 5,
         hidden_dim: int = 256,
         depth: int = 6,
         learning_rate: float = 1e-3,
@@ -147,7 +147,7 @@ class GNNLightningModule(pl.LightningModule):
     # Optimizers / Schedulers
     # ---------------------------
     def configure_optimizers(self) -> Dict[str, Any]:
-        optimizer = torch.optim.AdamW(
+        optimizer = torch.optim.Adam(
             self.parameters(),
             lr=self.hparams.learning_rate,
             weight_decay=self.hparams.weight_decay,
