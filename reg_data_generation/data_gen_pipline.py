@@ -85,7 +85,7 @@ def main(args):
     # Setup - Seed and device and root directory
     seed_everything(args.seed)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    experiment = f"{datetime.now().strftime('%m%d_%H%M')}_{args.experiment}_{args.n_samples}"
+    experiment = f"{datetime.now().strftime('%m%d_%H%M')}_{args.experiment}_{args.n_samples}_{args.seed}"
     root_dir = Path(args.root) / Path(experiment)
     root_dir.mkdir(parents=True, exist_ok=True)
     mol_dir = root_dir / Path("molecules")
