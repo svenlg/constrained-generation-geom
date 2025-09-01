@@ -32,12 +32,12 @@ class GenDataset(Dataset):
     ):
         self.experiment = experiment
         self.split = split
-        if "dipole" in property:
+        if property == "dipole_zero":
             self.property = "dipole"
-            if "dipole" != property:
-                self.set_zero_dipole = True
+            self.set_zero_dipole = True
         else:
             self.property = property
+            self.set_zero_dipole = False
 
         self.path = f"data/{experiment}"
         self.mol_path = self.path + "/molecules"
