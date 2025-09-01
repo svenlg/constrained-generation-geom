@@ -15,6 +15,7 @@ output/
 pretrained_models/
 flowmol/trained_models/
 wandb/
+lightning_logs/
 
 ### pyc and pycache ###
 *.pyc
