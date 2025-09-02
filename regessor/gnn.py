@@ -20,8 +20,8 @@ class GNN(nn.Module):
 
         self.head = nn.Linear(hidden_dim, 1)
 
-        if self.property == "dipole":
-            self.output = nn.ReLU()
+        if self.property == "dipole" or self.property == "dipole_zero":
+            self.output = nn.Softplus()
             self.tau = 1.0
         elif self.property == "score": # score is between 0 and 1
             self.output = nn.Sigmoid()
@@ -30,8 +30,8 @@ class GNN(nn.Module):
             self.output = nn.Identity()
             self.tau = 1.0
 
-        nn.init.zeros_(self.head.weight)
-        nn.init.zeros_(self.head.bias)
+        # nn.init.zeros_(self.head.weight)
+        # nn.init.zeros_(self.head.bias)
 
     def forward(self, g: dgl.DGLGraph) -> Tensor:
         with g.local_scope():

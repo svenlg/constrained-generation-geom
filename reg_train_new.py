@@ -329,11 +329,19 @@ def parse_args():
     p.add_argument("--wandb_project", type=str, default=None)
     p.add_argument("--wandb_name", type=str, default=None)
     p.add_argument("--early_stop_patience", type=int, default=20)
+    p.add_argument("--debug", action="store_true", help="Debug mode (smaller model, fewer epochs)")
     return p.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
+    if args.debug:
+        print("DEBUG MODE")
+        args.max_epochs = 10
+        args.batch_size = 16
+        args.hidden_dim = 64
+        args.depth = 4
+        args.use_wandb = False
     train(
         experiment=args.experiment,
         property=args.property,
