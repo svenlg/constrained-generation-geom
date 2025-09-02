@@ -1,0 +1,357 @@
+# train_plain.py
+import os
+import math
+import wandb
+import argparse
+from datetime import datetime
+from typing import Dict
+
+import numpy as np
+import torch
+from torch import nn
+from torch.optim import Adam
+from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, SequentialLR
+from torch.cuda.amp import autocast, GradScaler
+
+import dgl
+from dgl.dataloading import GraphDataLoader
+
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+# your project imports
+from regessor.gnn import GNN
+from regessor.dataset import GenDataset  # uses your dipole_zero logic
+
+# ---------------------------
+# Utilities
+# ---------------------------
+def set_seed(seed: int):
+    if seed is None:
+        return
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    np.random.seed(seed)
+    dgl.random.seed(seed)
+
+
+def make_loaders(experiment: str, property: str, batch_size: int, num_workers: int):
+    train_set = GenDataset(property=property, experiment=experiment, split="train")
+    val_set   = GenDataset(property=property, experiment=experiment, split="val")
+    test_set  = GenDataset(property=property, experiment=experiment, split="test")
+
+    train_loader = GraphDataLoader(
+        train_set, batch_size=batch_size, shuffle=True,
+        num_workers=num_workers, pin_memory=True
+    )
+    val_loader = GraphDataLoader(
+        val_set, batch_size=batch_size, shuffle=False,
+        num_workers=num_workers, pin_memory=True
+    )
+    test_loader = GraphDataLoader(
+        test_set, batch_size=batch_size, shuffle=False,
+        num_workers=num_workers, pin_memory=True
+    )
+    return train_loader, val_loader, test_loader
+
+
+def build_model(property: str, node_feats: int, edge_feats: int,
+                hidden_dim: int, depth: int, **kwargs) -> nn.Module:
+    return GNN(
+        property=property,
+        node_feats=node_feats,
+        edge_feats=edge_feats,
+        hidden_dim=hidden_dim,
+        depth=depth,
+        **kwargs
+    )
+
+
+def warmup_cosine_scheduler(optimizer: torch.optim.Optimizer,
+                            total_steps: int,
+                            warmup_steps: int,
+                            min_lr: float = 1e-6):
+    # Linear warmup, then cosine to min_lr
+    warmup = LinearLR(
+        optimizer, start_factor=0.1, end_factor=1.0,
+        total_iters=max(1, warmup_steps)
+    )
+    cosine_steps = max(1, total_steps - warmup_steps)
+    cosine = CosineAnnealingLR(
+        optimizer, T_max=cosine_steps, eta_min=min_lr
+    )
+    return SequentialLR(optimizer, [warmup, cosine], milestones=[warmup_steps])
+
+
+@torch.no_grad()
+def evaluate(model: nn.Module, loader: GraphDataLoader, device: torch.device,
+             loss_fn: nn.Module) -> Dict[str, float]:
+    model.eval()
+    losses = []
+    all_preds = []
+    all_tgts = []
+
+    for graphs, targets in loader:
+        graphs = graphs.to(device)
+        targets = targets.to(device)
+
+        preds = model(graphs).squeeze(-1)
+        loss = loss_fn(preds, targets)
+
+        losses.append(loss.item())
+        all_preds.append(preds.detach().cpu())
+        all_tgts.append(targets.detach().cpu())
+
+    preds = torch.cat(all_preds).numpy()
+    tgts = torch.cat(all_tgts).numpy()
+
+    mae = mean_absolute_error(tgts, preds)
+    rmse = float(np.sqrt(mean_squared_error(tgts, preds)))
+    r2 = r2_score(tgts, preds)
+
+    return {
+        "loss": float(np.mean(losses)),
+        "mae": float(mae),
+        "rmse": float(rmse),
+        "r2": float(r2)
+    }
+
+
+def save_checkpoint(state: Dict, ckpt_dir: str, filename: str):
+    os.makedirs(ckpt_dir, exist_ok=True)
+    path = os.path.join(ckpt_dir, filename)
+    torch.save(state, path)
+    return path
+
+
+# ---------------------------
+# Training Loop
+# ---------------------------
+def train(
+    experiment: str,
+    property: str,
+    batch_size: int = 64,
+    learning_rate: float = 1e-3,
+    weight_decay: float = 1e-5,
+    hidden_dim: int = 256,
+    depth: int = 8,
+    max_epochs: int = 100,
+    warmup_steps: int = 1000,
+    node_feats: int = 19,
+    edge_feats: int = 5,
+    grad_clip: float = 1.0,
+    seed: int = 0,
+    num_workers: int = 4,
+    use_wandb: bool = False,
+    wandb_project: str = None,
+    wandb_name: str = None,
+    early_stop_patience: int = 20,
+    amp: bool = True,
+):
+    set_seed(seed)
+
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    # Data
+    train_loader, val_loader, test_loader = make_loaders(
+        experiment, property, batch_size, num_workers
+    )
+
+    # Model / Optim / Sched / Loss
+    model = build_model(property, node_feats, edge_feats, hidden_dim, depth).to(device)
+    optimizer = Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    total_steps = max_epochs * max(1, len(train_loader))
+    scheduler = warmup_cosine_scheduler(optimizer, total_steps, warmup_steps, min_lr=1e-6)
+    loss_fn = nn.MSELoss()
+    scaler = GradScaler(enabled=amp)
+
+    # Logging / Checkpoints
+    run_id = datetime.now().strftime("%m%d_%H%M")
+    ckpt_dir = f"pretrained_models/{run_id}/checkpoints"
+    best_val = math.inf
+    best_path = None
+    epochs_no_improve = 0
+
+    # W&B
+    if use_wandb:
+        if wandb_project is None:
+            wandb_project = f"gnn-molecular-{property}"
+        if wandb_name is None:
+            wandb_name = f"{run_id}_bs{batch_size}_lr{learning_rate}_hd{hidden_dim}_d{depth}_me{max_epochs}"
+
+        wandb.init(project=wandb_project, name=wandb_name, config={
+            "experiment": experiment,
+            "property": property,
+            "batch_size": batch_size,
+            "learning_rate": learning_rate,
+            "weight_decay": weight_decay,
+            "hidden_dim": hidden_dim,
+            "depth": depth,
+            "max_epochs": max_epochs,
+            "warmup_steps": warmup_steps,
+            "node_feats": node_feats,
+            "edge_feats": edge_feats,
+            "grad_clip": grad_clip,
+            "seed": seed,
+            "amp": amp,
+        })
+
+    # ---------------------------
+    # Main loop
+    # ---------------------------
+    for epoch in range(1, max_epochs + 1):
+        model.train()
+        running = []
+
+        for batch_idx, (graphs, targets) in enumerate(train_loader, start=1):
+            graphs = graphs.to(device)
+            targets = targets.to(device)
+
+            optimizer.zero_grad(set_to_none=True)
+
+            with autocast(enabled=amp):
+                preds = model(graphs).squeeze(-1)
+                loss = loss_fn(preds, targets)
+
+            scaler.scale(loss).backward()
+
+            # Gradient clipping
+            if grad_clip is not None and grad_clip > 0:
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+
+            scaler.step(optimizer)
+            scaler.update()
+            scheduler.step()  # step per batch so warmup works
+
+            running.append(loss.item())
+
+            if use_wandb and (batch_idx % 50 == 0):
+                wandb.log({
+                    "train/step_loss": loss.item(),
+                    "train/lr": optimizer.param_groups[0]["lr"],
+                    "epoch": epoch,
+                })
+
+        train_loss = float(np.mean(running)) if running else float("nan")
+
+        # Validation
+        val_metrics = evaluate(model, val_loader, device, loss_fn)
+        val_loss = val_metrics["loss"]
+
+        # Logging per-epoch
+        log_dict = {
+            "epoch": epoch,
+            "train/loss": train_loss,
+            "val/loss": val_loss,
+            "val/mae": val_metrics["mae"],
+            "val/rmse": val_metrics["rmse"],
+            "val/r2": val_metrics["r2"],
+            "lr": optimizer.param_groups[0]["lr"],
+        }
+        print(
+            f"[{epoch:03d}/{max_epochs}] "
+            f"train_loss={train_loss:.4f} | "
+            f"val_loss={val_loss:.4f} | "
+            f"val_mae={val_metrics['mae']:.4f} | "
+            f"val_rmse={val_metrics['rmse']:.4f} | "
+            f"val_r2={val_metrics['r2']:.4f} | "
+            f"lr={optimizer.param_groups[0]['lr']:.3e}"
+        )
+        if use_wandb:
+            wandb.log(log_dict)
+
+        # Checkpointing (save best)
+        if val_loss < best_val:
+            best_val = val_loss
+            epochs_no_improve = 0
+            best_path = save_checkpoint(
+                {
+                    "epoch": epoch,
+                    "model_state": model.state_dict(),
+                    "val_loss": best_val,
+                    "config": wandb.config.as_dict() if use_wandb else {},
+                },
+                ckpt_dir,
+                filename=f"epoch{epoch:03d}-val{best_val:.4f}.pt",
+            )
+            print(f"  - New best ckpt: {best_path}")
+        else:
+            epochs_no_improve += 1
+            if epochs_no_improve >= early_stop_patience:
+                print(f"Early stopping triggered after {epoch} epochs.")
+                break
+
+    # ---------------------------
+    # Test (best checkpoint if available)
+    # ---------------------------
+    if best_path and os.path.isfile(best_path):
+        state = torch.load(best_path, map_location=device)
+        model.load_state_dict(state["model_state"])
+        print(f"Loaded best checkpoint: {best_path} (val_loss={state.get('val_loss','?')})")
+
+    test_metrics = evaluate(model, test_loader, device, loss_fn)
+    print(
+        f"[TEST] loss={test_metrics['loss']:.4f} | mae={test_metrics['mae']:.4f} | "
+        f"rmse={test_metrics['rmse']:.4f} | r2={test_metrics['r2']:.4f}"
+    )
+    if use_wandb:
+        wandb.log({
+            "test/loss": test_metrics["loss"],
+            "test/mae": test_metrics["mae"],
+            "test/rmse": test_metrics["rmse"],
+            "test/r2": test_metrics["r2"],
+        })
+        wandb.finish()
+
+
+# ---------------------------
+# CLI
+# ---------------------------
+def parse_args():
+    p = argparse.ArgumentParser("Train GNN (plain PyTorch + DGL)")
+    p.add_argument("-e", "--experiment", type=str, required=True, help="Path to data folder (same as before)")
+    p.add_argument("--property", type=str, default="dipole",
+                   help="One of: score, energy, homo, lumo, homolumo_gap, dipole, dipole_zero")
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("-bs", "--batch_size", type=int, default=64)
+    p.add_argument("-lr", "--learning_rate", type=float, default=1e-3)
+    p.add_argument("-wd", "--weight_decay", type=float, default=1e-5)
+    p.add_argument("-hd", "--hidden_dim", type=int, default=256)
+    p.add_argument("-d", "--depth", type=int, default=8)
+    p.add_argument("-me", "--max_epochs", type=int, default=100)
+    p.add_argument("--warmup_steps", type=int, default=1000)
+    p.add_argument("--node_feats", type=int, default=19)
+    p.add_argument("--edge_feats", type=int, default=5)
+    p.add_argument("--num_workers", type=int, default=4)
+    p.add_argument("--grad_clip", type=float, default=1.0)
+    p.add_argument("--no_amp", action="store_true", help="Disable mixed precision")
+    p.add_argument("--use_wandb", action="store_true")
+    p.add_argument("--wandb_project", type=str, default=None)
+    p.add_argument("--wandb_name", type=str, default=None)
+    p.add_argument("--early_stop_patience", type=int, default=20)
+    return p.parse_args()
+
+
+if __name__ == "__main__":
+    args = parse_args()
+    train(
+        experiment=args.experiment,
+        property=args.property,
+        batch_size=args.batch_size,
+        learning_rate=args.learning_rate,
+        weight_decay=args.weight_decay,
+        hidden_dim=args.hidden_dim,
+        depth=args.depth,
+        max_epochs=args.max_epochs,
+        warmup_steps=args.warmup_steps,
+        node_feats=args.node_feats,
+        edge_feats=args.edge_feats,
+        grad_clip=args.grad_clip,
+        seed=args.seed,
+        num_workers=args.num_workers,
+        use_wandb=args.use_wandb,
+        wandb_project=args.wandb_project,
+        wandb_name=args.wandb_name,
+        early_stop_patience=args.early_stop_patience,
+        amp=not args.no_amp,
+    )
