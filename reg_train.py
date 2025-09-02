@@ -22,7 +22,8 @@ def train_gnn(
     """Main training function."""
     
     # Set seeds
-    pl.seed_everything(seed, workers=True)
+    if seed is not None:
+        pl.seed_everything(seed, workers=True)
     
     # Default hyperparameters
     config = {
@@ -36,10 +37,14 @@ def train_gnn(
         'warmup_steps': 1000,
         **trainer_kwargs
     }
+    for k,v in config.items():
+        print(f"{k}:\t{v}")
 
     if use_wandb:
         # Initialize wandb logger
+        name = f'{datetime.now().strftime("%m%d_%H%M")}_bs{config["batch_size"]}_lr{config["learning_rate"]}_hd{config["hidden_dim"]}_d{config["depth"]}_me{config["max_epochs"]}'
         wandb_logger = WandbLogger(
+            name=name,
             project=f"gnn-molecular-{property}",
             config=config
         )
@@ -117,7 +122,7 @@ if __name__ == "__main__":
                         help="Path to data folder")
     parser.add_argument("--property", type=str, default="dipole",
                         help="Property to calculate with XTB (e.g., 'energy', 'homo', 'lumo', 'gap', 'dipole', 'dipole_zero') or 'score'")
-    parser.add_argument("--seed", type=int, default=0,
+    parser.add_argument("--seed", type=int, default=None,
                         help="Set seed")
     parser.add_argument("-bs", "--batch_size", type=int, default=64,
                         help="Batch size")
