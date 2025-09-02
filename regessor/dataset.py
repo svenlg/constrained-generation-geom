@@ -59,7 +59,7 @@ class GenDataset(Dataset):
 
         target_value = torch.tensor(self.df.iloc[idx][self.property], dtype=torch.float32)
         if self.set_zero_dipole:
-            target_value = torch.tensor(0.0, dtype=torch.float32) if self.df.iloc[idx]['score'] >= 0.0 else target_value
+            target_value = torch.tensor(0.0, dtype=torch.float32) if self.df.iloc[idx]['score'] > 0.0 else target_value
 
         return mol, target_value
 
