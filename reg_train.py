@@ -131,7 +131,15 @@ if __name__ == "__main__":
                         help="Maximum epochs")
     parser.add_argument("--use_wandb", action="store_true", 
                         help="use WandB in this run.")
+    parser.add_argument("--debug", action="store_true",
+                        help="Enable debug mode.")
     args = parser.parse_args()
-    
+    if args.debug:
+        print("DEBUG MODE")
+        args.max_epochs = 10
+        args.batch_size = 16
+        args.hidden_dim = 64
+        args.depth = 4
+        args.use_wandb = False
     train_gnn(**vars(args))
 
