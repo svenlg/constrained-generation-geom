@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple, Any, Optional
+from typing import Dict, List, Tuple, Any
 
 import torch
 import torch.nn as nn
@@ -6,8 +6,6 @@ import pytorch_lightning as pl
 import dgl
 import numpy as np
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
-
 
 from regessor.gnn import GNN
 
@@ -71,7 +69,7 @@ class GNNLightningModule(pl.LightningModule):
         preds = self(graphs).squeeze(-1)
         loss = self.loss_fn(preds, targets)
 
-        self.log("train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+        self.log("train/loss", loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
         return loss
 
     # ---------------------------
@@ -110,10 +108,10 @@ class GNNLightningModule(pl.LightningModule):
         r2 = r2_score(targets, preds)
 
         # Log epoch metrics (keep key 'val_loss' for checkpoint monitor)
-        self.log("val_loss", val_loss, prog_bar=True, sync_dist=True)
-        self.log("val_mae", mae, prog_bar=True, sync_dist=True)
-        self.log("val_rmse", rmse, prog_bar=True, sync_dist=True)
-        self.log("val_r2", r2, prog_bar=False, sync_dist=True)
+        self.log("val/loss", val_loss, prog_bar=True, sync_dist=True)
+        self.log("val/mae", mae, prog_bar=True, sync_dist=True)
+        self.log("val/rmse", rmse, prog_bar=True, sync_dist=True)
+        self.log("val/r2", r2, prog_bar=False, sync_dist=True)
 
     # ---------------------------
     # Test
@@ -147,10 +145,10 @@ class GNNLightningModule(pl.LightningModule):
         rmse = float(np.sqrt(mean_squared_error(targets, preds)))
         r2 = r2_score(targets, preds)
 
-        self.log("test_loss", test_loss, sync_dist=True)
-        self.log("test_mae", mae, sync_dist=True)
-        self.log("test_rmse", rmse, sync_dist=True)
-        self.log("test_r2", r2, sync_dist=True)
+        self.log("test/loss", test_loss, sync_dist=True)
+        self.log("test/mae", mae, sync_dist=True)
+        self.log("test/rmse", rmse, sync_dist=True)
+        self.log("test/r2", r2, sync_dist=True)
     
     # ---------------------------
     # Optimizers / Schedulers

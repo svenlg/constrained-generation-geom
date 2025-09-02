@@ -238,8 +238,19 @@ def train(
         val_metrics = evaluate(model, val_loader, device, loss_fn)
         val_loss = val_metrics["loss"]
 
+        print(
+            f"[{epoch:03d}/{max_epochs}] "
+            f"train/loss={train_loss:.4f} | "
+            f"val/loss={val_loss:.4f} | "
+            f"val/mae={val_metrics['mae']:.4f} | "
+            f"val/rmse={val_metrics['rmse']:.4f} | "
+            f"val/r2={val_metrics['r2']:.4f} | "
+            f"lr={optimizer.param_groups[0]['lr']:.3e}"
+        )
+        
         # Logging per-epoch
-        log_dict = {
+        if use_wandb:
+            wandb.log({
             "epoch": epoch,
             "train/loss": train_loss,
             "val/loss": val_loss,
@@ -247,18 +258,7 @@ def train(
             "val/rmse": val_metrics["rmse"],
             "val/r2": val_metrics["r2"],
             "lr": optimizer.param_groups[0]["lr"],
-        }
-        print(
-            f"[{epoch:03d}/{max_epochs}] "
-            f"train_loss={train_loss:.4f} | "
-            f"val_loss={val_loss:.4f} | "
-            f"val_mae={val_metrics['mae']:.4f} | "
-            f"val_rmse={val_metrics['rmse']:.4f} | "
-            f"val_r2={val_metrics['r2']:.4f} | "
-            f"lr={optimizer.param_groups[0]['lr']:.3e}"
-        )
-        if use_wandb:
-            wandb.log(log_dict)
+        })
 
         # Checkpointing (save best)
         if val_loss < best_val:
