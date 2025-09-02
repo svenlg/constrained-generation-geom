@@ -198,6 +198,8 @@ def train(
     # ---------------------------
     # Main loop
     # ---------------------------
+    print(f"Starting training on {property} for max {max_epochs} epochs:", flush=True)
+    print()
     for epoch in range(1, max_epochs + 1):
         model.train()
         running = []
@@ -245,8 +247,10 @@ def train(
             f"val/mae={val_metrics['mae']:.4f} | "
             f"val/rmse={val_metrics['rmse']:.4f} | "
             f"val/r2={val_metrics['r2']:.4f} | "
-            f"lr={optimizer.param_groups[0]['lr']:.3e}"
+            f"lr={optimizer.param_groups[0]['lr']:.3e}",
+            flush=True
         )
+        print()
 
         # Logging per-epoch
         if use_wandb:
