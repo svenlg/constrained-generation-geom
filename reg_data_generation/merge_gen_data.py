@@ -16,9 +16,9 @@ def natural_key(path: Path):
 
 def parse_args():
     ap = argparse.ArgumentParser(description="Merge gen_data_* runs into one dataset")
-    ap.add_argument("--sources", type=str, default="gen_data_2000_*",
-                    help="Glob for source run folders (default: gen_data_2000_*)")
-    ap.add_argument("--dest", type=str, default="gen_data_20000",
+    ap.add_argument("--sources", type=str, default="data/gen_data_20000_*",
+                    help="Glob for source run folders (default: data/gen_data_20000_*)")
+    ap.add_argument("--dest", type=str, default="data/gen_data_40000",
                     help="Destination folder for merged dataset")
     ap.add_argument("--results_name", type=str, default="results.csv",
                     help="Name of the results CSV in each source folder")
