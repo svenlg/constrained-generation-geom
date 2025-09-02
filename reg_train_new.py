@@ -166,7 +166,7 @@ def train(
 
     # Logging / Checkpoints
     run_id = datetime.now().strftime("%m%d_%H%M")
-    ckpt_dir = f"pretrained_models/{run_id}/checkpoints"
+    ckpt_dir = f"pretrained_models/{property}/{run_id}/checkpoints"
     best_val = math.inf
     best_path = None
     epochs_no_improve = 0
@@ -247,7 +247,7 @@ def train(
             f"val/r2={val_metrics['r2']:.4f} | "
             f"lr={optimizer.param_groups[0]['lr']:.3e}"
         )
-        
+
         # Logging per-epoch
         if use_wandb:
             wandb.log({
@@ -312,7 +312,7 @@ def parse_args():
     p.add_argument("-e", "--experiment", type=str, required=True, help="Path to data folder (same as before)")
     p.add_argument("--property", type=str, default="dipole",
                    help="One of: score, energy, homo, lumo, homolumo_gap, dipole, dipole_zero")
-    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--seed", type=int, default=None)
     p.add_argument("-bs", "--batch_size", type=int, default=64)
     p.add_argument("-lr", "--learning_rate", type=float, default=1e-3)
     p.add_argument("-wd", "--weight_decay", type=float, default=1e-5)

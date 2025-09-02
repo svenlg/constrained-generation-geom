@@ -75,7 +75,7 @@ def train_gnn(
     )
     
     # Callbacks
-    ckpt_dir = f"pretrained_models/{datetime.now().strftime('%m%d_%H%M')}/checkpoints/"
+    ckpt_dir = f"pretrained_models/{property}/{datetime.now().strftime('%m%d_%H%M')}/checkpoints/"
     callbacks = [
         ModelCheckpoint(
             dirpath=ckpt_dir,
