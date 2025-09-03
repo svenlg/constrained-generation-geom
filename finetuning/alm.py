@@ -66,9 +66,9 @@ class AugmentedLagrangian:
         if self.old_contraction_value is None:
             rho = self.rho
             print(f"k = 1")
-        elif self.old_contraction_value < self.tau * self.contraction_value:
+        elif self.contraction_value < self.tau * self.old_contraction_value:
             rho = self.rho
-            print(f"k =/= 1 and old_contraction_value < tau * contraction_value")
+            print(f"k =/= 1 and contraction_value < tau * old_contraction_value")
         else:
             rho = self.eta * self.rho
             print(f"eta * rho")

@@ -220,8 +220,7 @@ def train(
             f"val/loss={val_loss:.4f} | "
             f"val/mae={val_metrics['mae']:.4f} | "
             f"val/rmse={val_metrics['rmse']:.4f} | "
-            f"val/r2={val_metrics['r2']:.4f} | "
-            f"lr={optimizer.param_groups[0]['lr']:.3e}",
+            f"val/r2={val_metrics['r2']:.4f}",
             flush=True
         )
 
