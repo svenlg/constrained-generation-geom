@@ -246,7 +246,7 @@ def train(
                     "epoch": epoch,
                     "model_state": model.state_dict(),
                     "val_loss": best_val,
-                    "config": wandb.config.as_dict() if use_wandb else {},
+                    "config": config,
                 },
                 ckpt_dir,
                 filename=f"best_model.pt",
