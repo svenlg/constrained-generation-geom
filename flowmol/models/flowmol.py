@@ -524,13 +524,13 @@ class FlowMol(pl.LightningModule):
         integrate_kwargs = {
             'upper_edge_mask': upper_edge_mask,
             'n_timesteps': n_timesteps,
+            'sampler_type': sampler_type,
+            'keep_intermediate_graphs': keep_intermediate_graphs,
             'visualize': visualize
         }
         if self.parameterization == 'ctmc':
             integrate_kwargs['stochasticity'] = stochasticity
             integrate_kwargs['high_confidence_threshold'] = high_confidence_threshold
-            integrate_kwargs['sampler_type'] = sampler_type
-            integrate_kwargs['keep_intermediate_graphs'] = keep_intermediate_graphs
 
         itg_result = self.vector_field.integrate(g, node_batch_idx, **integrate_kwargs, **kwargs)
 

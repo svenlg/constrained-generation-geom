@@ -8,6 +8,7 @@ import scipy
 from flowmol.models.gvp import GVPConv, GVP, _rbf, _norm_no_nan
 from flowmol.models.interpolant_scheduler import InterpolantScheduler
 from flowmol.utils.dirflow import DirichletConditionalFlow, simplex_proj
+from flowmol.models.ctmc_vector_field import prepair_graph
 
 class EndpointVectorField(nn.Module):
 
@@ -263,10 +264,18 @@ class EndpointVectorField(nn.Module):
     def integrate(self, g: dgl.DGLGraph, 
         node_batch_idx: torch.Tensor,
         upper_edge_mask: torch.Tensor, 
-        n_timesteps: int, 
-        visualize=False,
+        n_timesteps: int,
+        sampler_type: str = "euler",
+        keep_intermediate_graphs: bool = False,
+        visualize: bool = False,
         **kwargs):
         """Integrate the trajectories of molecules along the vector field."""
+
+        if sampler_type not in ['euler', 'memoryless']:
+            raise ValueError(f"Invalid sampler_type: {sampler_type}. Must be 'euler' or 'memoryless'.")
+        
+        if sampler_type == 'memoryless':
+            self.sigmas = []
 
         # get the time-point for integration
         t = torch.linspace(0, 1, n_timesteps, device=g.device)
@@ -299,7 +308,11 @@ class EndpointVectorField(nn.Module):
                 init_frame = torch.split(init_frame, split_sizes)
                 traj_frames[feat] = [ init_frame ]
                 traj_frames[f'{feat}_1_pred'] = []
-    
+
+        if keep_intermediate_graphs:
+            # create a list to store the intermediate graphs
+            intermediate_graphs = [prepair_graph(g, upper_edge_mask)]
+        
         for s_idx in range(1,t.shape[0]):
 
             # get the next time-point (s) and the current time-point (t)
@@ -310,7 +323,7 @@ class EndpointVectorField(nn.Module):
             alpha_t_prime_i = alpha_t_prime[s_idx - 1]
 
             # compute next step and set x_t = x_s
-            g = self.step(g, s_i, t_i, alpha_t_i, alpha_s_i, alpha_t_prime_i, node_batch_idx, upper_edge_mask, **kwargs)
+            g = self.step(g, s_i, t_i, alpha_t_i, alpha_s_i, alpha_t_prime_i, node_batch_idx, upper_edge_mask, sampler_type, **kwargs)
 
             if visualize:
                 for feat in self.canonical_feat_order:
@@ -340,6 +353,9 @@ class EndpointVectorField(nn.Module):
                     ep_frame = g_data_src[ep_key].detach().cpu()
                     ep_frame = torch.split(ep_frame, split_sizes)
                     traj_frames[ep_key].append(ep_frame)
+            
+            if keep_intermediate_graphs:
+                intermediate_graphs.append(prepair_graph(g, upper_edge_mask))
 
         # set x_1 = x_t
         for feat in self.canonical_feat_order:
@@ -350,6 +366,11 @@ class EndpointVectorField(nn.Module):
                 g_data_src = g.ndata
 
             g_data_src[f'{feat}_1'] = g_data_src[f'{feat}_t']
+
+        if keep_intermediate_graphs:
+            # return the intermediate graphs
+            g = prepair_graph(g, upper_edge_mask)
+            return g, intermediate_graphs
 
         if visualize:
             # currently, traj_frames[key] is a list of lists. each sublist contains the frame for every molecule in the batch
@@ -372,7 +393,7 @@ class EndpointVectorField(nn.Module):
     def step(self, g: dgl.DGLGraph, s_i: torch.Tensor, t_i: torch.Tensor,
              alpha_t_i: torch.Tensor, alpha_s_i: torch.Tensor, alpha_t_prime_i: torch.Tensor,
              node_batch_idx: torch.Tensor, upper_edge_mask: torch.Tensor,
-             inv_temp_func=None,
+             inv_temp_func = None, sampler_type: str = 'euler',
             **kwargs):
         
         if inv_temp_func is None:
@@ -403,15 +424,25 @@ class EndpointVectorField(nn.Module):
 
             # evaluate the vector field at the current timepoint
             vf = self.vector_field(x_t, x_1, alpha_t_i[feat_idx], alpha_t_prime_i[feat_idx])
-
-            # apply temperature scaling
-            vf = vf * inv_temp_func(t_i)
-
+            
             # x1_weight = alpha_t_prime_i[feat_idx]*(s_i - t_i)/(1 - alpha_t_i[feat_idx])
             # xt_weight = 1 - x1_weight
 
+            dt = s_i - t_i
+
             # apply euler integration step
-            x_s = x_t + vf*(s_i - t_i)
+            # x_t+1 = x_t + dt * vf
+            if sampler_type == 'euler':
+                x_s = x_t + dt * vf * inv_temp_func(t_i)
+
+            # Memoryless step for positions (linear noise schedule)
+            # x_t+1 = x_t + dt (2 * vf - alpha_dot / alpha x_t) + dt * sigma * noise
+            elif sampler_type == 'memoryless':
+                sigma = torch.sqrt(2 * alpha_t_prime_i[feat_idx] * (1 - alpha_t_i[feat_idx]) / (alpha_t_i[feat_idx] + dt))
+                eps_pred = 2 * vf - alpha_t_prime_i[feat_idx]/(alpha_t_i[feat_idx]+dt) * x_t
+                x_s = x_t + dt * eps_pred + torch.sqrt(dt) * sigma * torch.randn_like(x_t)
+                # TODO sigma is kept to often
+                self.sigmas.append(sigma)
 
             if feat == "e":
 
@@ -470,8 +501,8 @@ class VectorField(EndpointVectorField):
     
     def step(self, g: dgl.DGLGraph, s_i: torch.Tensor, t_i: torch.Tensor,
              alpha_t_i: torch.Tensor, alpha_s_i: torch.Tensor, alpha_t_prime_i: torch.Tensor,
-             node_batch_idx: torch.Tensor, upper_edge_mask: torch.Tensor):
-        
+             node_batch_idx: torch.Tensor, upper_edge_mask: torch.Tensor, sampler_type: str = 'euler'):
+
         # predict the destination of the trajectory given the current timepoint
         vec_field = self(
             g, 
@@ -563,8 +594,8 @@ class DirichletVectorField(EndpointVectorField):
     
     def step(self, g: dgl.DGLGraph, s_i: torch.Tensor, t_i: torch.Tensor,
              alpha_t_i: torch.Tensor, alpha_s_i: torch.Tensor, alpha_t_prime_i: torch.Tensor,
-             node_batch_idx: torch.Tensor, upper_edge_mask: torch.Tensor):
-        
+             node_batch_idx: torch.Tensor, upper_edge_mask: torch.Tensor, sampler_type: str = 'euler'):
+
         # alpha_t_i has shape (n_feats,)
         
         # predict the destination of the trajectory given the current timepoint
@@ -589,7 +620,6 @@ class DirichletVectorField(EndpointVectorField):
         # convert alpha values to w
         w_t = self.alpha_to_w(alpha_t_i)
         w_s = self.alpha_to_w(alpha_s_i)
-
 
         # take integration step for node categorical features
         for feat_idx, feat in enumerate(self.canonical_feat_order):

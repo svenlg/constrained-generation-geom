@@ -6,6 +6,7 @@ import time
 import copy
 import wandb
 import torch
+import torch.nn as nn
 import numpy as np
 from pathlib import Path
 from datetime import datetime
@@ -17,10 +18,11 @@ from utils.utils import extract_trailing_numbers, set_seed
 import dgl
 import flowmol
 
-from environment.reward_functional import RewardFunctional
+from environment import AugmentedReward
 
-from finetuning.alm import AugmentedLagrangian
-from finetuning.flow_adjoint import AdjointMatchingFinetuningTrainerFlowMol
+from finetuning import AugmentedLagrangian, AdjointMatchingFinetuningTrainerFlowMol
+
+from regessor import GNN
 
 # Load - Flow Model
 def setup_gen_model(flow_model: str, device: torch.device): 
@@ -28,24 +30,13 @@ def setup_gen_model(flow_model: str, device: torch.device):
     gen_model.to(device)
     return gen_model
 
-# Setup PAMNet
-def setup_pamnet_model(config: OmegaConf, device: torch.device):
-    from PAMNet.models import PAMNet_s, Config
-    abs_path = os.getcwd()
-    path = osp.join(abs_path, 'pretrained_models', config.type, config.dataset, config.date)
-    tmp_config = OmegaConf.load(path + '/config.yaml')
-    pamnet_config = Config(
-        dataset = tmp_config.dataset, 
-        dim = tmp_config.dim, 
-        n_layer = tmp_config.n_layer, 
-        cutoff_l = tmp_config.cutoff_l, 
-        cutoff_g = tmp_config.cutoff_g,
-    )
-    reward_model = PAMNet_s(pamnet_config)
-    reward_model.load_state_dict(torch.load(path + '/model.pth', map_location='cpu'))
-    reward_model.to(device)
-    reward_model.eval()
-    return reward_model
+# Setup Reward and constraint models
+def load_regressor(property: str, date: str, device: torch.device) -> nn.Module:
+    model_path = osp.join("pretrained_models", property, date, "checkpoint", "best_model.pth")
+    state = torch.load(model_path, map_location=device)
+    model = GNN(property=property, **state["config"])
+    model.load_state_dict(state["model_state"])
+    return model
 
 # Sampling
 def sampling(config: OmegaConf, model: flowmol.FlowMol, device: torch.device):
@@ -175,24 +166,21 @@ def main():
     base_model = setup_gen_model(config.flow_model, device=device)
     gen_model = copy.deepcopy(base_model)
 
-    # Setup - Reward and Gradient Functions
-    if constraint_fn == "sascore":
-        constraint_model = setup_pamnet_model(config.pamnet, device=device)
-    else:
-        constraint_model = None
+    # Setup - Reward and Constraint Functions
+    reward_model = load_regressor(config.reward.fn, config.reward.date, device=device)
+    constraint_model = load_regressor(config.constraint.fn, config.constraint.date, device=device)
 
-    # Setup - Environment, RewardFunctional, ConstraintModel
-    reward_functional = RewardFunctional(
-        reward_fn = config.reward.fn,
-        constraint_fn = config.constraint.fn,
-        reward_lambda = config.reward_lambda,
-        bound = config.constraint.bound,
-        constraint_model = constraint_model,
+    # Setup - Environment, AugmentedReward, ConstraintModel
+    augmented_reward = AugmentedReward(
+        reward_fn = reward_model,
+        constraint_fn = constraint_model,
+        alpha = reward_lambda,
+        bound = bound,
         device = device,
     )
     
     # Set the initial lambda and rho
-    reward_functional.set_lambda_rho(
+    augmented_reward.set_lambda_rho(
         lambda_ = 0.0, 
         rho_ = rho_init,
     )
@@ -231,27 +219,29 @@ def main():
         del tmp_samples
 
     # Compute reward for current samples
-    tmp_dict = reward_functional.functional(new_molecules)
-    al_total_rewards.append(tmp_dict["total_reward"])
-    al_rewards.append(tmp_dict["reward"])
-    al_constraints.append(tmp_dict["constraint"])
-    al_constraint_violations.append(tmp_dict["constraint_violations"])
+    _ = augmented_reward(new_molecules)
+    tmp_log = augmented_reward.get_statistics()
+    al_total_rewards.append(tmp_log["total_reward"])
+    al_rewards.append(tmp_log["reward"])
+    al_constraints.append(tmp_log["constraint"])
+    al_constraint_violations.append(tmp_log["constraint_violations"])
 
     al_lowest_const_violations = al_constraint_violations[-1]
     al_best_reward = al_rewards[-1]
 
     alm = AugmentedLagrangian(
         config = config.augmented_lagrangian,
-        bound = config.constraint.bound,
+        constraint_fn = constraint_model,
+        bound = bound,
         device = device,
     )
     # Set initial expected constraint (only needed for logging)
-    _ = alm.expected_constraint(tmp_dict["constraint"])
+    _ = alm.expected_constraint(new_molecules)
 
     # Log al initial states
     if args.use_wandb:
         logs = {}
-        logs.update(tmp_dict)
+        logs.update(tmp_log)
         logs.update({"total_best_reward": al_best_reward})
         log = alm.get_statistics()
         logs.update(log) # lambda, rho, expected_constraint
@@ -268,7 +258,7 @@ def main():
             al_stats[key].append(float(log[key]))
 
         # Set the lambda and rho in the reward functional
-        reward_functional.set_lambda_rho(lambda_, rho_)
+        augmented_reward.set_lambda_rho(lambda_, rho_)
 
         # Print lambda and rho for the current round
         print(f"Lambda: {lambda_:.4f}, rho: {rho_:.4f}", flush=True)
@@ -278,7 +268,7 @@ def main():
             config = config.adjoint_matching,
             model = copy.deepcopy(gen_model),
             base_model = copy.deepcopy(base_model),
-            grad_reward_fn = reward_functional.grad_reward_fn,
+            grad_reward_fn = augmented_reward.grad_augmented_reward_fn,
             device = device,
             verbose = False,
         )
@@ -314,24 +304,24 @@ def main():
                     device=device
                 )
                 del tmp_model
-                if args.save_samples and False:
-                    new_samples.extend(dgl.unbatch(new_molecules.cpu()))
 
                 # Compute reward for current samples
-                tmp_dict = reward_functional.functional(new_molecules)
+                    # Compute reward for current samples
+                _ = augmented_reward(new_molecules)
                 del new_molecules
-                am_total_rewards.append(tmp_dict["total_reward"])
-                am_rewards.append(tmp_dict["reward"])
-                am_constraints.append(tmp_dict["constraint"])
-                am_constraint_violations.append(tmp_dict["constraint_violations"])
-
+                tmp_log = augmented_reward.get_statistics()
+                am_total_rewards.append(tmp_log["total_reward"])
+                am_rewards.append(tmp_log["reward"])
+                am_constraints.append(tmp_log["constraint"])
+                am_constraint_violations.append(tmp_log["constraint_violations"])
+                
                 if am_total_rewards[-1] > am_best_total_reward:
                     am_best_total_reward = am_total_rewards[-1]
                     am_best_iteration = i
 
                 if args.use_wandb:
                     logs = {}
-                    logs.update(tmp_dict)
+                    logs.update(tmp_log)
                     logs.update({"loss": am_losses[-1],
                                  "total_best_reward": am_best_total_reward})
                     log = alm.get_statistics()
@@ -375,12 +365,8 @@ def main():
             save_graphs(tmp_save_path, tmp_samples)
             del tmp_samples
         
-        constraint_set = reward_functional.constraint(new_molecules)
-        alm.update_lambda_rho(constraint_set)
+        alm.update_lambda_rho(new_molecules)
         del new_molecules
-
-        # if alm.convergence():
-        #     break
 
     # Finish wandb run
     if args.use_wandb:
@@ -431,9 +417,6 @@ def main():
 
     # Save the samples if enabled
     if args.save_samples:
-        # from dgl import save_graphs
-        # tmp_save_path = str(save_path / Path("samples.bin"))
-        # save_graphs(tmp_save_path, new_samples)
         print(f"Samples saved to {save_path}", flush=True)
 
     print(f"--- Final ---", flush=True)

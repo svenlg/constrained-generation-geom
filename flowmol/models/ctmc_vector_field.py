@@ -147,15 +147,15 @@ class CTMCVectorField(EndpointVectorField):
         upper_edge_mask:
         torch.Tensor,
         n_timesteps: int, 
-        visualize=False, 
-        dfm_type:str='campbell',
-        stochasticity:float=8.0, 
-        high_confidence_threshold:float=0.9,
-        cat_temp_func=None,
-        forward_weight_func=None,
-        tspan=None,
-        sampler_type: str='euler',
-        keep_intermediate_graphs = False,
+        visualize = False, 
+        dfm_type: str = 'campbell',
+        stochasticity: float = 8.0, 
+        high_confidence_threshold: float = 0.9,
+        cat_temp_func = None,
+        forward_weight_func = None,
+        tspan = None,
+        sampler_type: str = 'euler',
+        keep_intermediate_graphs: bool = False,
         **kwargs
     ):
         """Integrate the trajectories of molecules along the vector field."""
