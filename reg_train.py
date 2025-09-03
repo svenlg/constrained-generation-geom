@@ -200,7 +200,6 @@ def train(
             if use_wandb and (batch_idx % 50 == 0):
                 wandb.log({
                     "train/step_loss": loss.item(),
-                    "train/lr": optimizer.param_groups[0]["lr"],
                     "epoch": epoch,
                 })
 
@@ -220,7 +219,6 @@ def train(
             f"lr={optimizer.param_groups[0]['lr']:.3e}",
             flush=True
         )
-        print()
 
         # Logging per-epoch
         if use_wandb:
@@ -236,6 +234,7 @@ def train(
 
         # Checkpointing (save best)
         if val_loss < best_val:
+            print(f"- New best: with val_loss={val_loss:.4f}")
             best_val = val_loss
             epochs_no_improve = 0
             best_path = save_checkpoint(
@@ -246,9 +245,9 @@ def train(
                     "config": wandb.config.as_dict() if use_wandb else {},
                 },
                 ckpt_dir,
-                filename=f"epoch{epoch:03d}-val{best_val:.4f}.pt",
+                filename=f"best_model.pt",
             )
-            print(f"  - New best ckpt: {best_path}")
+            
         else:
             epochs_no_improve += 1
             if epochs_no_improve >= early_stop_patience:
