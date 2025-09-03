@@ -141,30 +141,30 @@ def train(
     best_path = None
     epochs_no_improve = 0
 
-    # W&B
+    config ={
+        "experiment": experiment,
+        "property": property,
+        "batch_size": batch_size,
+        "learning_rate": learning_rate,
+        "weight_decay": weight_decay,
+        "hidden_dim": hidden_dim,
+        "depth": depth,
+        "max_epochs": max_epochs,
+        "warmup_steps": warmup_steps,
+        "node_feats": node_feats,
+        "edge_feats": edge_feats,
+        "grad_clip": grad_clip,
+        "seed": seed,
+        "amp": amp,
+    }
+
+    # WandB
     if use_wandb:
         if wandb_project is None:
             wandb_project = f"gnn-molecular-{property}"
         if wandb_name is None:
             wandb_name = f"{run_id}_bs{batch_size}_lr{learning_rate}_hd{hidden_dim}_d{depth}_me{max_epochs}"
-
-        config ={
-            "experiment": experiment,
-            "property": property,
-            "batch_size": batch_size,
-            "learning_rate": learning_rate,
-            "weight_decay": weight_decay,
-            "hidden_dim": hidden_dim,
-            "depth": depth,
-            "max_epochs": max_epochs,
-            "warmup_steps": warmup_steps,
-            "node_feats": node_feats,
-            "edge_feats": edge_feats,
-            "grad_clip": grad_clip,
-            "seed": seed,
-            "amp": amp,
-        }
-    wandb.init(project=wandb_project, name=wandb_name, config=config)
+        wandb.init(project=wandb_project, name=wandb_name, config=config)
 
     # ---------------------------
     # Main loop
@@ -174,7 +174,7 @@ def train(
     for key, value in config.items():
         print(f"  {key}: {value}")
     print()
-    
+
     for epoch in range(1, max_epochs + 1):
         model.train()
         running = []
