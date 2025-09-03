@@ -3,9 +3,7 @@ import pandas as pd
 from typing import Dict, List, Optional, Tuple
 
 import torch
-import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
-import pytorch_lightning as pl
+from torch.utils.data import Dataset
 import dgl
 from dgl.dataloading import GraphDataLoader
 
@@ -63,3 +61,22 @@ class GenDataset(Dataset):
 
         return mol, target_value
 
+
+def make_loaders(experiment: str, property: str, batch_size: int, num_workers: int):
+    train_set = GenDataset(property=property, experiment=experiment, split="train")
+    val_set   = GenDataset(property=property, experiment=experiment, split="val")
+    test_set  = GenDataset(property=property, experiment=experiment, split="test")
+
+    train_loader = GraphDataLoader(
+        train_set, batch_size=batch_size, shuffle=True,
+        num_workers=num_workers, pin_memory=True
+    )
+    val_loader = GraphDataLoader(
+        val_set, batch_size=batch_size, shuffle=False,
+        num_workers=num_workers, pin_memory=True
+    )
+    test_loader = GraphDataLoader(
+        test_set, batch_size=batch_size, shuffle=False,
+        num_workers=num_workers, pin_memory=True
+    )
+    return train_loader, val_loader, test_loader

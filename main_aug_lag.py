@@ -12,7 +12,7 @@ from datetime import datetime
 from omegaconf import OmegaConf
 
 from utils.setup import parse_args, update_config_with_args
-from utils.utils import extract_trailing_numbers, seed_everything
+from utils.utils import extract_trailing_numbers, set_seed
 
 import dgl
 import flowmol
@@ -72,7 +72,7 @@ def main():
     config = update_config_with_args(config, args)
 
     # Setup - Seed and device
-    seed_everything(config.seed)
+    set_seed(config.seed)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # Setup - WandB

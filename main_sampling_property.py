@@ -9,7 +9,7 @@ from datetime import datetime
 
 import numpy as np
 import torch
-from utils.utils import seed_everything
+from utils.utils import set_seed
 
 import flowmol
 
@@ -158,7 +158,7 @@ def main():
     args = parse_args()
 
     # Setup - Seed and device and root directory
-    seed_everything(args.seed)
+    set_seed(args.seed)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # General Parameters

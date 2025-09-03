@@ -18,40 +18,10 @@ from dgl.dataloading import GraphDataLoader
 
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-# your project imports
 from regessor.gnn import GNN
-from regessor.dataset import GenDataset  # uses your dipole_zero logic
+from regessor.dataset import make_loaders  
 
-# ---------------------------
-# Utilities
-# ---------------------------
-def set_seed(seed: int):
-    if seed is None:
-        return
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    np.random.seed(seed)
-    dgl.random.seed(seed)
-
-
-def make_loaders(experiment: str, property: str, batch_size: int, num_workers: int):
-    train_set = GenDataset(property=property, experiment=experiment, split="train")
-    val_set   = GenDataset(property=property, experiment=experiment, split="val")
-    test_set  = GenDataset(property=property, experiment=experiment, split="test")
-
-    train_loader = GraphDataLoader(
-        train_set, batch_size=batch_size, shuffle=True,
-        num_workers=num_workers, pin_memory=True
-    )
-    val_loader = GraphDataLoader(
-        val_set, batch_size=batch_size, shuffle=False,
-        num_workers=num_workers, pin_memory=True
-    )
-    test_loader = GraphDataLoader(
-        test_set, batch_size=batch_size, shuffle=False,
-        num_workers=num_workers, pin_memory=True
-    )
-    return train_loader, val_loader, test_loader
+from utils.utils import set_seed
 
 
 def build_model(property: str, node_feats: int, edge_feats: int,

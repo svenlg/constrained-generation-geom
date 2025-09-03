@@ -14,7 +14,7 @@ from posebusters import PoseBusters
 from reg_data_generation.posebuster_scorer import posebusters_score
 from reg_data_generation.xtb_calc import compute_xtb
 
-from utils.utils import seed_everything
+from utils.utils import set_seed
 import flowmol
 
 import logging
@@ -80,7 +80,7 @@ def sampling_and_processing(
 
 def main(args):
     # Setup - Seed and device and root directory
-    seed_everything(args.seed)
+    set_seed(args.seed)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     experiment = f"{datetime.now().strftime('%m%d_%H%M')}_{args.experiment}_{args.n_samples}_{args.seed}"
     root_dir = Path(args.root) / Path(experiment)
