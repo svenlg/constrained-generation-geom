@@ -148,7 +148,7 @@ def train(
         if wandb_name is None:
             wandb_name = f"{run_id}_bs{batch_size}_lr{learning_rate}_hd{hidden_dim}_d{depth}_me{max_epochs}"
 
-        wandb.init(project=wandb_project, name=wandb_name, config={
+        config ={
             "experiment": experiment,
             "property": property,
             "batch_size": batch_size,
@@ -163,13 +163,18 @@ def train(
             "grad_clip": grad_clip,
             "seed": seed,
             "amp": amp,
-        })
+        }
+    wandb.init(project=wandb_project, name=wandb_name, config=config)
 
     # ---------------------------
     # Main loop
     # ---------------------------
     print(f"Starting training on {property} for max {max_epochs} epochs:", flush=True)
+    print(f"Parameter:")
+    for key, value in config.items():
+        print(f"  {key}: {value}")
     print()
+    
     for epoch in range(1, max_epochs + 1):
         model.train()
         running = []
