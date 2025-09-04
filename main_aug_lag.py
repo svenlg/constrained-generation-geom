@@ -98,18 +98,17 @@ def main():
         print(f"Run will be saved at:")
         print(save_path)
 
-    # Plotting - Settings
-    config.verbose = args.verbose
-
     # Augmented Lagrangian Parameters
     lagrangian_updates = config.augmented_lagrangian.lagrangian_updates
 
     # Adjoint Matching Parameters
     reward_lambda = config.reward_lambda
     traj_len = config.adjoint_matching.sampling.num_integration_steps
+    finetune_steps = config.adjoint_matching.sampling.num_samples // config.adjoint_matching.batch_size
+    finetune_steps = config.adjoint_matching.get("finetune_steps", finetune_steps)
 
-    num_iterations = 500 // lagrangian_updates
-    plotting_freq = 2
+    num_iterations = config.total_iterations // lagrangian_updates
+    plotting_freq = num_iterations // 5
 
     baseline = args.baseline
     if baseline:
@@ -120,14 +119,14 @@ def main():
     config.reward_sampling.sampler_type = "euler"
 
     if args.debug:
-        config.augmented_lagrangian.sampling.num_samples = 3
-        config.adjoint_matching.sampling.num_samples = 3
-        config.adjoint_matching.batch_size = 3
-        config.adjoint_matching.finetune_steps = 1
-        config.reward_sampling.num_samples = 3
+        # config.augmented_lagrangian.sampling.num_samples = 24
+        config.adjoint_matching.sampling.num_samples = 16
+        config.adjoint_matching.batch_size = 4
+        # config.adjoint_matching.finetune_steps = 4
+        # config.reward_sampling.num_samples = 10
         plotting_freq = 1
         args.save_samples = False
-        num_iterations = 2
+        num_iterations = 3
         lagrangian_updates = 2
         print("Debug mode activated", flush=True)
 
@@ -158,7 +157,7 @@ def main():
     print(f"\tbatch_size: {config.adjoint_matching.batch_size}", flush=True)
     print(f"\tsampling.num_samples: {config.adjoint_matching.sampling.num_samples}", flush=True)
     print(f"\tsampling.num_integration_steps: {config.adjoint_matching.sampling.num_integration_steps}", flush=True)
-    print(f"\tfinetune_steps: {config.adjoint_matching.finetune_steps}", flush=True)
+    print(f"\tfinetune_steps: {finetune_steps}", flush=True)
     print(f"\tnum_iterations: {num_iterations}", flush=True)
 
     # Setup - Gen Model
@@ -265,7 +264,7 @@ def main():
             base_model = copy.deepcopy(base_model),
             grad_reward_fn = augmented_reward.grad_augmented_reward_fn,
             device = device,
-            verbose = False,
+            verbose = args.debug,
         )
 
         am_total_rewards = []
@@ -286,7 +285,8 @@ def main():
                 continue
 
             # Fine-tune the model with adjoint matching loss
-            loss = trainer.finetune(dataset, steps=config.adjoint_matching.finetune_steps)
+            loss = trainer.finetune(dataset, steps=finetune_steps)
+            del dataset
 
             if i % plotting_freq == 0:
                 am_losses.append(loss/reward_lambda/(traj_len//2))
@@ -360,8 +360,8 @@ def main():
             del tmp_samples
         
         alm.update_lambda_rho(new_molecules)
-        del new_molecules
-
+        del new_molecules, trainer
+    
     # Finish wandb run
     if use_wandb:
         wandb.finish()

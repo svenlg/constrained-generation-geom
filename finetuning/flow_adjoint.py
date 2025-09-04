@@ -215,9 +215,12 @@ class AdjointMatchingFinetuningTrainerFlowMol:
             with torch.no_grad():
                 while True:
                     graph_trajectories, ts, sigmas = self.sample_trajectories()
+                    if self.verbose:
+                        print(f"Sampled trajectory with {graph_trajectories[0].num_nodes()} nodes and {graph_trajectories[0].num_edges()} edges.")
                     if graph_trajectories[0].num_nodes() <= self.max_nodes:
-                        break  
-                    print(f"Rerolling: got {graph_trajectories[0].num_nodes()} nodes (> {self.max_nodes})")
+                        break 
+                    if self.verbose:
+                        print(f"Rerolling: got {graph_trajectories[0].num_nodes()} nodes (> {self.max_nodes})")
             
             # ts: tensor of shape (num_ts,) (0, dt, 2dt, ..., 1-dt, 1)
             # graph_trajectories: is a list of dgl graphs (graph_trajectory[0] =^= t=0 and graph_trajectory[T-1] =^= t=1
@@ -344,13 +347,13 @@ class AdjointMatchingFinetuningTrainerFlowMol:
         if self.clip_loss > 0.0:
             loss = torch.clamp(loss, min=0.0, max=self.clip_loss)
 
-        if self.verbose and self.config.clip_grad_norm > 0.0:
-            total_norm = 0
-            for p in self.fine_model.parameters():
-                param_norm = p.grad.detach().data.norm(2)
-                total_norm += param_norm.item() ** 2
-            total_norm = total_norm ** 0.5
-            print(f"Before Clipping Norm: {total_norm:.6f}")
+        # if self.verbose and self.config.clip_grad_norm > 0.0:
+        #     total_norm = 0
+        #     for p in self.fine_model.parameters():
+        #         param_norm = p.grad.detach().data.norm(2)
+        #         total_norm += param_norm.item() ** 2
+        #     total_norm = total_norm ** 0.5
+        #     print(f"Before Clipping Norm: {total_norm:.6f}")
 
         if self.clip_grad_norm > 0.0:
             torch.nn.utils.clip_grad_norm_(self.fine_model.parameters(), self.clip_grad_norm)
