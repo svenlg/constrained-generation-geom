@@ -136,7 +136,7 @@ def train(
 
     # Logging / Checkpoints
     run_id = datetime.now().strftime("%m%d_%H%M")
-    ckpt_dir = f"pretrained_models/{property}/{run_id}/checkpoints"
+    ckpt_dir = f"pretrained_models/{property}/{run_id}"
     best_val = math.inf
     best_path = None
     epochs_no_improve = 0
@@ -165,6 +165,11 @@ def train(
         if wandb_name is None:
             wandb_name = f"{run_id}_bs{batch_size}_lr{learning_rate}_hd{hidden_dim}_d{depth}_me{max_epochs}"
         wandb.init(project=wandb_project, name=wandb_name, config=config)
+        sweep_id = wandb.run.sweep_id if wandb.run.sweep_id else None
+        if sweep_id is not None:
+            print(f"WandB sweep ID: {sweep_id}")
+            run_id = wandb.run.id
+            ckpt_dir = f"pretrained_models/{property}/{sweep_id}/{run_id}/"
 
     # ---------------------------
     # Main loop
