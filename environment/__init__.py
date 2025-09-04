@@ -1,1 +1,1 @@
-from augmented_reward import AugmentedReward
+from .augmented_reward import AugmentedReward

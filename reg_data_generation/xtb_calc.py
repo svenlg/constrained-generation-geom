@@ -109,32 +109,6 @@ def run_xtb(xyz_file):
 
     return rtn_dict
 
-# def compute_xtb(molecule, format_type):
-#     """
-#     Compute a homolumo, dipole, and energy for a molecule using xtb.
-
-#     Args:
-#         molecule: The molecule object (RDKit Mol or DGLGraph).
-#         format_type: The format of the molecule ("rdkit" or "dgl").
-#     Returns:
-#         A dictionary containing the computed quantities.
-#     """
-#     # Convert molecule to XYZ file
-#     xyz_file = "molecule.xyz"
-#     molecule_to_xyz(molecule, format_type, xyz_file)
-
-#     # Run xtb and compute the quantity
-#     value = run_xtb(xyz_file)
-
-#     # Clean up temporary file
-#     subprocess.run(["rm", xyz_file])
-#     subprocess.run(["rm", "charges"])
-#     subprocess.run(["rm", "wbo"])
-#     subprocess.run(["rm", "xtbrestart"])
-#     subprocess.run(["rm", "xtbtopo.mol"])
-
-#     return value
-
 def compute_xtb(molecule, format_type):
     """
     Compute HOMO-LUMO gap, dipole, and energy for a molecule using xTB.

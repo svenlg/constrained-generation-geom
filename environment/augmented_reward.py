@@ -1,6 +1,7 @@
 import copy
 import torch
-
+import dgl
+from typing import Union
 
 class AugmentedReward:
     def __init__(
@@ -52,7 +53,7 @@ class AugmentedReward:
             ).mean()
         return self.alpha * self.tmp_total
 
-    def grad_augmented_reward_fn(self, x: torch.Tensor) -> torch.Tensor:
+    def grad_augmented_reward_fn(self, x: Union[torch.Tensor, dgl.DGLGraph]) -> torch.Tensor:
 
         if isinstance(self.reward_fn, torch.nn.Module):
             self.reward_fn.eval()
@@ -61,14 +62,33 @@ class AugmentedReward:
 
         with torch.enable_grad():
             x = x.to(self.device)
-            x = x.clone().detach().requires_grad_(True)
+            if isinstance(x, dgl.DGLGraph):
+                x.ndata['x_t'] = x.ndata['x_t'].clone().detach().requires_grad_(True)
+                x.ndata['a_t'] = x.ndata['a_t'].clone().detach().requires_grad_(True)
+                x.ndata['c_t'] = x.ndata['c_t'].clone().detach().requires_grad_(True)
+                x.edata['e_t'] = x.edata['e_t'].clone().detach().requires_grad_(True)
+            if isinstance(x, torch.Tensor):
+                x = x.clone().detach().requires_grad_(True)
 
             tmp_augmented_reward = self(x)
 
             tmp_augmented_reward.backward()
-            grad = x.grad
 
-        x.requires_grad = False
+            if isinstance(x, dgl.DGLGraph):
+                grad = dgl.graph((x.edges()[0], x.edges()[1]), num_nodes=x.num_nodes(), device=x.device)
+                grad.set_batch_num_nodes(x.batch_num_nodes())
+                grad.set_batch_num_edges(x.batch_num_edges())
+
+                grad.ndata['x_t'] = x.ndata['x_t'].grad.clone().detach().requires_grad_(False)
+                grad.ndata['a_t'] = x.ndata['a_t'].grad.clone().detach().requires_grad_(False)
+                grad.ndata['c_t'] = x.ndata['c_t'].grad.clone().detach().requires_grad_(False)
+
+                grad.edata['e_t'] = x.edata['e_t'].grad.clone().detach().requires_grad_(False)
+                grad.edata['ue_mask'] = x.edata['ue_mask'].detach().clone()
+
+            if isinstance(x, torch.Tensor):
+                grad = x.grad.clone().detach().requires_grad_(False)
+
         return grad
 
     def get_statistics(self) -> dict:

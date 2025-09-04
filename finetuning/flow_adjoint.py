@@ -3,23 +3,24 @@ import copy
 from tqdm import tqdm
 from omegaconf import OmegaConf
 
+import dgl
 import torch
 import flowmol
 from torch.utils.data import Dataset, ConcatDataset
-from finetuning.flow_adjoint_solver import LeanAdjointSolverFlow
+from finetuning.flow_adjoint_solver import LeanAdjointSolverFlow, step
 
 
 class AMDataset(Dataset):
     def __init__(self, solver_info):
+        # NOTE: T is the number of steps after the cutoff time
         solver_info = self.detach_all(solver_info)
         self.t = solver_info['t'] # (T,)
         self.sigma_t = solver_info['sigma_t'] # (T,)
         self.alpha = solver_info['alpha'] # (T,)
         self.alpha_dot = solver_info['alpha_dot']# (T,)
         self.traj_g = solver_info['traj_graph'] # list of dgl graphs (T,)
-        self.traj_adj = solver_info['traj_adj'] # (T, nodes, 3)
-        self.traj_v_base = solver_info['traj_v_pred'] # (T, nodes, 3)
-        self.row_mask = solver_info['row_mask'] # (nodes,)
+        self.traj_adj = solver_info['traj_adj'] # list of dicts with {x, a, c, e} each (T,)
+        self.traj_v_base = solver_info['traj_v_pred'] # list of dicts with {x, a, c, e} each (T,)
 
         self.T = self.t.size(0) # T = number of time steps
         self.bs = 1 # len(self.traj_g[0].batch_num_nodes())
@@ -34,10 +35,8 @@ class AMDataset(Dataset):
             'alpha': self.alpha,
             'alpha_dot': self.alpha_dot,
             'traj_graph': self.traj_g,
-            # 'traj_x': self.traj_x,
             'traj_adj': self.traj_adj,
             'traj_v_base': self.traj_v_base,
-            'row_mask': self.row_mask,
         }
     
     def detach_all(self, solver_info):
@@ -45,19 +44,30 @@ class AMDataset(Dataset):
             if isinstance(value, torch.Tensor):
                 solver_info[key] = value.detach()
             elif isinstance(value, list):
-                for g in value:
-                    for k in g.ndata.keys():
-                        if isinstance(g.ndata[k], torch.Tensor):
-                            g.ndata[k] = g.ndata[k].detach()
-                    for k in g.edata.keys():
-                        if isinstance(g.edata[k], torch.Tensor):
-                            g.edata[k] = g.edata[k].detach()
+                if isinstance(value[0], dgl.DGLGraph):
+                    for g in value:
+                        for k in g.ndata.keys():
+                            if isinstance(g.ndata[k], torch.Tensor):
+                                g.ndata[k] = g.ndata[k].detach()
+                        for k in g.edata.keys():
+                            if isinstance(g.edata[k], torch.Tensor):
+                                g.edata[k] = g.edata[k].detach()
+                if isinstance(value[0], dict):
+                    for dict_i in range(len(value)):
+                        for k, v in value[dict_i].items():
+                            if isinstance(v, torch.Tensor):
+                                value[dict_i][k] = v.detach()
         return solver_info
 
 
-def create_timestep_subset(total_steps, final_percent=0.25, sample_percent=0.25):
+def create_timestep_subset(
+        total_steps, 
+        final_percent: float = 0.25, 
+        sample_percent: float = 0.25, 
+        samples_for_sumapproximation: int = None,
+    ) -> np.ndarray:
     """
-    Create a subset of time-steps for efficient computation. (See paper Appendix G2)
+    Create a subset of time-steps for efficient computation. (See AM-Paper Appendix G2)
     
     Args:
         total_steps (int): Total number of time-steps in the process
@@ -87,11 +97,18 @@ def create_timestep_subset(total_steps, final_percent=0.25, sample_percent=0.25)
         size=sample_steps_count, 
         replace=False
     )
-    
-    # Combine and sort the samples
     combined_samples = np.sort(np.concatenate([final_samples, additional_samples]))
-    
-    return combined_samples
+
+    # Take at most samples_for_sumapproximation samples
+    if samples_for_sumapproximation is not None and samples_for_sumapproximation < combined_samples.shape[0]:
+        combined_samples = np.random.choice(
+            combined_samples, 
+            size=samples_for_sumapproximation, 
+            replace=False
+        )
+
+    # Sort the idx before returning
+    return np.sort(combined_samples)
 
 
 def adj_matching_loss(v_base, v_fine, adj, sigma):
@@ -104,6 +121,23 @@ def adj_matching_loss(v_base, v_fine, adj, sigma):
     loss = torch.mean(term_difference)
     return loss 
 
+loss_weights = {
+    'a': 0.4,
+    'c': 1.0,
+    'e': 2.0,
+    'x': 3.0
+}
+def adj_matching_loss_list_of_dicts(v_base, v_fine, adj, sigma):
+    """Adjoint matching loss for FM"""
+    loss = 0.0
+    for i, feat in enumerate(['x', 'a', 'c', 'e']):
+        diff = v_fine[feat] - v_base[feat]
+        term_diff = (2 / sigma[:,i][:,None,None]) * diff
+        term_adj = sigma[:,i][:,None,None] * adj[feat]
+        term_difference = term_diff - term_adj
+        term_difference = torch.sum(torch.square(term_difference), dim=[1, 2])
+        loss += torch.mean(term_difference) * loss_weights[feat]
+    return loss
 
 class AdjointMatchingFinetuningTrainerFlowMol:
     def __init__(self,
@@ -133,6 +167,13 @@ class AdjointMatchingFinetuningTrainerFlowMol:
 
         # Reward (Gradient of the reward function(al))
         self.grad_reward_fn = grad_reward_fn
+
+        # Engineering tricks:
+        self.cutoff_time = config.get("cutoff_time", 0.5) 
+        samples_for_sumapproximation = config.get("samples_for_sumapproximation", 10)
+        self.samples_for_sumapproximation = min(samples_for_sumapproximation, self.sampling_config.num_integration_steps + 1)
+        self.final_percent = config.get("final_percent", 0.25)
+        self.sample_percent = config.get("sample_percent", 0.25)
 
         # Setup optimizer
         self.configure_optimizers()
@@ -177,15 +218,26 @@ class AdjointMatchingFinetuningTrainerFlowMol:
                     if graph_trajectories[0].num_nodes() <= self.max_nodes:
                         break  
                     print(f"Rerolling: got {graph_trajectories[0].num_nodes()} nodes (> {self.max_nodes})")
+            
+            # ts: tensor of shape (num_ts,) (0, dt, 2dt, ..., 1-dt, 1)
+            # graph_trajectories: is a list of dgl graphs (graph_trajectory[0] =^= t=0 and graph_trajectory[T-1] =^= t=1
+            # flip to go from 1 to 0
+            ts = ts.flip(0)
+            sigmas = sigmas.flip(0)
+            graph_trajectories = graph_trajectories[::-1]
 
+            # Cutoff time for efficiency
+            if self.cutoff_time < 1.0:
+                cutoff_idx = int(self.cutoff_time * (ts.shape[0] - 1))
+                ts = ts[:cutoff_idx + 1]
+                graph_trajectories = graph_trajectories[:cutoff_idx + 1]
+                sigmas = sigmas[:cutoff_idx] # sigmas has one less entry than ts
+            
             # graph_trajectories is a list of the intermediate graphs
             solver_info = solver.solve(graph_trajectories=graph_trajectories, ts=ts)
             # add sigma_t to solver_info
             solver_info['sigma_t'] = sigmas
             
-            if (~solver_info['row_mask']).all():
-                print("Row mask is all True, skipping sample")
-                continue
             dataset = AMDataset(solver_info=solver_info)
             datasets.append(dataset)
 
@@ -194,18 +246,41 @@ class AdjointMatchingFinetuningTrainerFlowMol:
         dataset = ConcatDataset(datasets)
         return dataset
 
+    def push_to_device(self, sample):
+        for key, value in sample.items():
+            if isinstance(value, torch.Tensor):
+                sample[key] = value.to(self.device)
+            elif isinstance(value, list):
+                if isinstance(value[0], dgl.DGLGraph):
+                    for i in range(len(value)):
+                        value[i] = value[i].to(self.device)
+                if isinstance(value[0], dict):
+                    for dict_i in range(len(value)):
+                        for k, v in value[dict_i].items():
+                            if isinstance(v, torch.Tensor):
+                                value[dict_i][k] = v.to(self.device)
+        return sample
+
     def train_step(self, sample):
         """Training step."""
 
-        ts = sample['t'].to(self.device)
-        sigmas = sample['sigma_t'].to(self.device)
-        alpha = sample['alpha'].to(self.device)
-        alpha_dot = sample['alpha_dot'].to(self.device)
-        traj_g = [g.to(self.device) for g in sample['traj_graph']]
-        traj_adj = sample['traj_adj'].to(self.device)
-        # traj_x = sample['traj_x'].to(self.device)
-        traj_v_base = sample['traj_v_base'].to(self.device)
-        row_mask = sample['row_mask'].to(self.device)
+        sample = self.push_to_device(sample)
+        # ts = sample['t'].to(self.device)
+        # sigmas = sample['sigma_t'].to(self.device)
+        # alpha = sample['alpha'].to(self.device)
+        # alpha_dot = sample['alpha_dot'].to(self.device)
+        # traj_g = [g.to(self.device) for g in sample['traj_graph']]
+        # traj_adj = sample['traj_adj'].to(self.device)
+        # # traj_x = sample['traj_x'].to(self.device)
+        # traj_v_base = sample['traj_v_base'].to(self.device)
+        # # row_mask = sample['row_mask'].to(self.device)
+        ts = sample['t']
+        sigmas = sample['sigma_t']
+        alpha = sample['alpha']
+        alpha_dot = sample['alpha_dot']
+        traj_g = sample['traj_graph']
+        traj_adj = sample['traj_adj']
+        traj_v_base = sample['traj_v_base']
 
         # Get index for time steps to calculate adjoint matching loss
         idxs = create_timestep_subset(ts.shape[0])
@@ -224,39 +299,32 @@ class AdjointMatchingFinetuningTrainerFlowMol:
             alpha_t = alpha[idx]
             alpha_dot_t = alpha_dot[idx]
 
-            node_batch_idx = torch.zeros(g_base_t.num_nodes(), dtype=torch.long)
-
-            # predict the destination of the trajectory given the current time-point
-            dst_dict = self.fine_model.vector_field(
-                g_base_t, 
-                t=torch.full((g_base_t.batch_size,), t, device=g_base_t.device),
-                node_batch_idx=node_batch_idx,
-                upper_edge_mask=g_base_t.edata['ue_mask'],
-                apply_softmax=True,
-                remove_com=True
+            v_fine_t, _ = step(
+                model = self.fine_model,
+                adj = None,
+                g_t = g_base_t, 
+                t = t, 
+                alpha = alpha_t, 
+                alpha_dot = alpha_dot_t, 
+                dt = ts[0] - ts[1], 
+                upper_edge_mask = g_base_t.edata['ue_mask'],
+                calc_adj=False
             )
-            # take integration step for positions
-            x_1 = dst_dict['x']
-            x_t = g_base_t.ndata['x_t']
-
-            v_fine_t = self.fine_model.vector_field.vector_field(x_t, x_1, alpha_t, alpha_dot_t)
-            
-            v_base_t = v_base_t[row_mask]
-            v_fine_t = v_fine_t[row_mask]
-            adj_t = adj_t[row_mask]
             
             v_base.append(v_base_t)
             v_fine.append(v_fine_t)
             adj.append(adj_t)
             sigma.append(sigma_t)
         
-        # stack the tensors
-        v_base = torch.stack(v_base, dim=0)
-        v_fine = torch.stack(v_fine, dim=0)
+        assert len(v_base) == len(v_fine) == len(adj) == len(sigma)
+        # stack each list of dicts to a dict of feature tensors
+
+        v_base = {feat: torch.stack([v_base[i][feat] for i in range(len(v_base))], dim=0) for feat in ['x', 'a', 'c', 'e']}
+        v_fine = {feat: torch.stack([v_fine[i][feat] for i in range(len(v_fine))], dim=0) for feat in ['x', 'a', 'c', 'e']}
+        adj = {feat: torch.stack([adj[i][feat] for i in range(len(adj))], dim=0) for feat in ['x', 'a', 'c', 'e']}
         sigma = torch.stack(sigma, dim=0)
-        adj = torch.stack(adj, dim=0)
-        
-        loss = adj_matching_loss(
+
+        loss = adj_matching_loss_list_of_dicts(
             v_base=v_base,
             v_fine=v_fine,
             adj=adj,

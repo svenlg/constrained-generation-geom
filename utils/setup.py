@@ -18,7 +18,7 @@ def parse_args():
     parser.add_argument("--save_plots", action='store_true',
                         help="Save plots of rewards and constraints, default: false")
     # FlowMol arguments
-    flowmol_choices = ['qm9_ctmc', 'qm9_gaussian', 'qm9_simplexflow', 'qm9_dirichlet', 'geom_ctmc']
+    flowmol_choices = ['qm9_ctmc', 'qm9_gaussian', 'geom_ctmc', 'geom_gaussian']
     parser.add_argument('--flow_model', type=str, choices=flowmol_choices,
                         help='pretrained model to be used')
     # PAMNet arguments
@@ -35,9 +35,6 @@ def parse_args():
     parser.add_argument("--bound", type=float,
                         help="Override bound in config")
     # Augmented Lagrangian Parameters
-    # options = ["expanded", "rockefeller", "proof"]
-    # parser.add_argument("--functional_type", type=str, choices=options, default="expanded",
-    #                     help="Override functional_type in config")
     parser.add_argument("--rho_init", type=float,
                         help="Override rho_init in config")
     parser.add_argument("--rho_max", type=float,

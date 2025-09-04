@@ -32,9 +32,14 @@ def setup_gen_model(flow_model: str, device: torch.device):
 
 # Setup Reward and constraint models
 def load_regressor(property: str, date: str, device: torch.device) -> nn.Module:
-    model_path = osp.join("pretrained_models", property, date, "checkpoint", "best_model.pth")
+    model_path = osp.join("pretrained_models", property, date, "best_model.pt")
     state = torch.load(model_path, map_location=device)
-    model = GNN(property=property, **state["config"])
+    model = GNN(property=property, 
+                node_feats=state["config"]["node_feats"],
+                edge_feats=state["config"]["edge_feats"],
+                hidden_dim=state["config"]["hidden_dim"],
+                depth=state["config"]["depth"],
+            )
     model.load_state_dict(state["model_state"])
     return model
 
@@ -67,7 +72,8 @@ def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # Setup - WandB
-    if args.use_wandb:
+    use_wandb = args.use_wandb and not args.debug
+    if use_wandb:
         if "sweep" in config.experiment:
             wandb.init()
             run_name = wandb.run.name  # e.g., "olive-sweep-229"
@@ -82,7 +88,7 @@ def main():
 
     tmp_time = datetime.now().strftime("%m-%d-%H")
     save_path = Path(config.root) / Path("aa_experiments") / Path(config.experiment)
-    if args.use_wandb and ("sweep" in config.experiment):
+    if use_wandb and ("sweep" in config.experiment):
         save_path = save_path / Path(f"{run_id}")
     if (args.save_samples or args.save_model or args.save_plots) and not args.debug:
         if args.output_end is not None:
@@ -95,30 +101,12 @@ def main():
     # Plotting - Settings
     config.verbose = args.verbose
 
-    # General Parameters
-    flowmol_model = config.flow_model
-
-    # Reward and Constraint functions
-    reward_fn = config.reward.fn
-    constraint_fn = config.constraint.fn
-    bound = config.constraint.bound
-
     # Augmented Lagrangian Parameters
-    rho_init = config.augmented_lagrangian.rho_init
-    rho_max = config.augmented_lagrangian.rho_max
-    eta = config.augmented_lagrangian.eta
     lagrangian_updates = config.augmented_lagrangian.lagrangian_updates
 
     # Adjoint Matching Parameters
     reward_lambda = config.reward_lambda
-    learning_rate = config.adjoint_matching.lr
-    clip_grad_norm = config.adjoint_matching.clip_grad_norm
-    clip_loss = config.adjoint_matching.clip_loss
-    batch_size = config.adjoint_matching.batch_size
-    traj_samples_per_stage = config.adjoint_matching.sampling.num_samples
     traj_len = config.adjoint_matching.sampling.num_integration_steps
-    finetune_steps = config.adjoint_matching.finetune_steps
-    num_iterations = config.adjoint_matching.num_iterations
 
     num_iterations = 500 // lagrangian_updates
     plotting_freq = 2
@@ -130,11 +118,23 @@ def main():
     config.augmented_lagrangian.sampling.sampler_type = "euler"
     config.adjoint_matching.sampling.sampler_type = "memoryless"
     config.reward_sampling.sampler_type = "euler"
-    
+
+    if args.debug:
+        config.augmented_lagrangian.sampling.num_samples = 3
+        config.adjoint_matching.sampling.num_samples = 3
+        config.adjoint_matching.batch_size = 3
+        config.adjoint_matching.finetune_steps = 1
+        config.reward_sampling.num_samples = 3
+        plotting_freq = 1
+        args.save_samples = False
+        num_iterations = 2
+        lagrangian_updates = 2
+        print("Debug mode activated", flush=True)
+
     print(f"--- Start ---", flush=True)
-    print(f"Finetuning {flowmol_model} in experiment {config.experiment}", flush=True)
-    print(f"Reward: {reward_fn} - Constraint: {constraint_fn}", flush=True)
-    print(f"Maximum Bound: {bound}", flush=True)
+    print(f"Finetuning {config.flow_model} in experiment {config.experiment}", flush=True)
+    print(f"Reward: {config.reward.fn} - Constraint: {config.constraint.fn}", flush=True)
+    print(f"Maximum Bound: {config.constraint.bound}", flush=True)
     start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"Start time: {start_time}", flush=True)
     print(f"Device: {device}", flush=True)
@@ -146,20 +146,19 @@ def main():
         print(f"\tbaseline: {baseline}", flush=True)
         print(f"\tbase_lambda: {base_lambda}", flush=True)
     else:
-        print(f"\trho_init: {rho_init}", flush=True)
-        print(f"\trho_max: {rho_max}", flush=True)
-        print(f"\teta: {eta}", flush=True)
+        print(f"\trho_init: {config.augmented_lagrangian.rho_init}", flush=True)
+        print(f"\teta: {config.augmented_lagrangian.eta}", flush=True)
         print(f"\tlagrangian_updates: {lagrangian_updates}", flush=True)
 
     print(f"Adjoint Matching Parameters", flush=True)
     print(f"\treward_lambda: {reward_lambda}", flush=True)
-    print(f"\tlr: {learning_rate}", flush=True)
-    print(f"\tclip_grad_norm: {clip_grad_norm}", flush=True)
-    print(f"\tclip_loss: {clip_loss}", flush=True)
-    print(f"\tbatch_size: {batch_size}", flush=True)
-    print(f"\tsampling.num_samples: {traj_samples_per_stage}", flush=True)
-    print(f"\tsampling.num_integration_steps: {traj_len}", flush=True)
-    print(f"\tfinetune_steps: {finetune_steps}", flush=True)
+    print(f"\tlr: {config.adjoint_matching.lr}", flush=True)
+    print(f"\tclip_grad_norm: {config.adjoint_matching.clip_grad_norm}", flush=True)
+    print(f"\tclip_loss: {config.adjoint_matching.clip_loss}", flush=True)
+    print(f"\tbatch_size: {config.adjoint_matching.batch_size}", flush=True)
+    print(f"\tsampling.num_samples: {config.adjoint_matching.sampling.num_samples}", flush=True)
+    print(f"\tsampling.num_integration_steps: {config.adjoint_matching.sampling.num_integration_steps}", flush=True)
+    print(f"\tfinetune_steps: {config.adjoint_matching.finetune_steps}", flush=True)
     print(f"\tnum_iterations: {num_iterations}", flush=True)
 
     # Setup - Gen Model
@@ -175,22 +174,18 @@ def main():
         reward_fn = reward_model,
         constraint_fn = constraint_model,
         alpha = reward_lambda,
-        bound = bound,
+        bound = config.constraint.bound,
         device = device,
     )
     
     # Set the initial lambda and rho
     augmented_reward.set_lambda_rho(
         lambda_ = 0.0, 
-        rho_ = rho_init,
+        rho_ = config.augmented_lagrangian.rho_init,
     )
 
     # Initialize lists to store loss and rewards
-    al_stats = {
-        "lambda": [],
-        "rho": [],
-        "expected_constraint": [],
-    }
+    al_stats = {"lambda": [], "rho": [], "expected_constraint": []}
     al_total_rewards = []
     al_rewards = []
     al_constraints = []
@@ -232,14 +227,14 @@ def main():
     alm = AugmentedLagrangian(
         config = config.augmented_lagrangian,
         constraint_fn = constraint_model,
-        bound = bound,
+        bound = config.constraint.bound,
         device = device,
     )
     # Set initial expected constraint (only needed for logging)
     _ = alm.expected_constraint(new_molecules)
 
     # Log al initial states
-    if args.use_wandb:
+    if use_wandb:
         logs = {}
         logs.update(tmp_log)
         logs.update({"total_best_reward": al_best_reward})
@@ -306,7 +301,6 @@ def main():
                 del tmp_model
 
                 # Compute reward for current samples
-                    # Compute reward for current samples
                 _ = augmented_reward(new_molecules)
                 del new_molecules
                 tmp_log = augmented_reward.get_statistics()
@@ -319,7 +313,7 @@ def main():
                     am_best_total_reward = am_total_rewards[-1]
                     am_best_iteration = i
 
-                if args.use_wandb:
+                if use_wandb:
                     logs = {}
                     logs.update(tmp_log)
                     logs.update({"loss": am_losses[-1],
@@ -369,10 +363,10 @@ def main():
         del new_molecules
 
     # Finish wandb run
-    if args.use_wandb:
+    if use_wandb:
         wandb.finish()
     
-    if not args.wandb:
+    if not args.debug:
         OmegaConf.save(config, save_path / Path("config.yaml"))
         results = {
             "total_rewards": np.array(al_total_rewards),
@@ -390,7 +384,7 @@ def main():
         )
 
     # Plotting if enabled
-    if args.save_plots:
+    if args.save_plots and not args.debug:
         from utils.plotting import plot_graphs
         # Plot rewards and constraints
         tmp_data = [al_total_rewards, al_rewards, al_constraints, al_constraint_violations]
@@ -411,12 +405,12 @@ def main():
         print(f"Saved plots to {save_path}", flush=True)
 
     # Save the model if enabled
-    if args.save_model:
+    if args.save_model and not args.debug:
         torch.save(gen_model.cpu().state_dict(), save_path / Path("final_model.pth"))
         print(f"Model saved to {save_path}", flush=True)
 
     # Save the samples if enabled
-    if args.save_samples:
+    if args.save_samples and not args.debug:
         print(f"Samples saved to {save_path}", flush=True)
 
     print(f"--- Final ---", flush=True)

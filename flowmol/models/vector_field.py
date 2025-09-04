@@ -8,7 +8,6 @@ import scipy
 from flowmol.models.gvp import GVPConv, GVP, _rbf, _norm_no_nan
 from flowmol.models.interpolant_scheduler import InterpolantScheduler
 from flowmol.utils.dirflow import DirichletConditionalFlow, simplex_proj
-from flowmol.models.ctmc_vector_field import prepair_graph
 
 class EndpointVectorField(nn.Module):
 
@@ -323,7 +322,7 @@ class EndpointVectorField(nn.Module):
             alpha_t_prime_i = alpha_t_prime[s_idx - 1]
 
             # compute next step and set x_t = x_s
-            g = self.step(g, s_i, t_i, alpha_t_i, alpha_s_i, alpha_t_prime_i, node_batch_idx, upper_edge_mask, sampler_type, **kwargs)
+            g = self.step(g, s_i, t_i, alpha_t_i, alpha_s_i, alpha_t_prime_i, node_batch_idx, upper_edge_mask, sampler_type=sampler_type, **kwargs)
 
             if visualize:
                 for feat in self.canonical_feat_order:
@@ -409,6 +408,9 @@ class EndpointVectorField(nn.Module):
             remove_com=True,
         )
 
+        if sampler_type == 'memoryless':
+            feat_sigma = []
+        
         # compute x_s for each feature and set x_t = x_s
         for feat_idx, feat in enumerate(self.canonical_feat_order):
             if feat == "e":
@@ -424,7 +426,7 @@ class EndpointVectorField(nn.Module):
 
             # evaluate the vector field at the current timepoint
             vf = self.vector_field(x_t, x_1, alpha_t_i[feat_idx], alpha_t_prime_i[feat_idx])
-            
+
             # x1_weight = alpha_t_prime_i[feat_idx]*(s_i - t_i)/(1 - alpha_t_i[feat_idx])
             # xt_weight = 1 - x1_weight
 
@@ -442,10 +444,9 @@ class EndpointVectorField(nn.Module):
                 eps_pred = 2 * vf - alpha_t_prime_i[feat_idx]/(alpha_t_i[feat_idx]+dt) * x_t
                 x_s = x_t + dt * eps_pred + torch.sqrt(dt) * sigma * torch.randn_like(x_t)
                 # TODO sigma is kept to often
-                self.sigmas.append(sigma)
+                feat_sigma.append(sigma)
 
             if feat == "e":
-
                 # set the edge features so that corresponding upper and lower triangle edges have the same value
                 e_s = torch.zeros_like(g.edata['e_0'])
                 e_s[upper_edge_mask] = x_s
@@ -463,6 +464,9 @@ class EndpointVectorField(nn.Module):
             # record updated feature in the graph
             data_src[f'{feat}_t'] = x_s
 
+        # record sigma
+        if sampler_type == 'memoryless':
+            self.sigmas.append(torch.stack(feat_sigma, dim=0).to(g.device))
         return g
 
     def vector_field(self, x_t, x_1, alpha_t, alpha_t_prime):
@@ -771,3 +775,30 @@ class EdgeUpdate(nn.Module):
 
         edge_feats = self.edge_norm(edge_feats + self.edge_update_fn(torch.cat(mlp_inputs, dim=-1)))
         return edge_feats
+
+
+def prepair_graph(g: dgl.DGLGraph, upper_edge_mask) -> dgl.DGLGraph:
+    """Prepare the graph for adjoint matching to a new device."""
+    # We just need need:
+    # 1. the edges
+    # 2. the number of nodes
+    # 3. the node features
+    #   x_t = x_t
+    #   a_t = a_t
+    #   c_t = c_t
+    # 4. the edge features
+    #   e_t = e_t
+    new_g = dgl.graph((g.edges()[0], g.edges()[1]), num_nodes=g.num_nodes(), device=g.device)
+    new_g.set_batch_num_nodes(g.batch_num_nodes())
+    new_g.set_batch_num_edges(g.batch_num_edges())
+
+    # transfer over node features
+    new_g.ndata['x_t'] = g.ndata['x_t'].detach().clone()
+    new_g.ndata['a_t'] = g.ndata['a_t'].detach().clone()
+    new_g.ndata['c_t'] = g.ndata['c_t'].detach().clone()
+
+    # transfer over edge features
+    new_g.edata['e_t'] = g.edata['e_t'].detach().clone()
+    new_g.edata['ue_mask'] = upper_edge_mask.detach().clone()
+
+    return new_g
