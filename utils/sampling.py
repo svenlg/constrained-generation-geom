@@ -7,7 +7,7 @@ import dgl
 
 
 MAX_ALLOWED_ATOMS = 75  # upper bound for molecule size (can be upto 182 for GEOM)
-MIN_ALLOWED_ATOMS = 25  # lower bound for molecule size (can be as low as 3 for GEOM)
+MIN_ALLOWED_ATOMS = 30  # lower bound for molecule size (can be as low as 3 for GEOM)
 
 
 def sampling(
