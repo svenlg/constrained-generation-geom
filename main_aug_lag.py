@@ -117,7 +117,6 @@ def main():
     reward_lambda = config.reward_lambda
     traj_len = config.adjoint_matching.sampling.num_integration_steps
     finetune_steps = config.adjoint_matching.sampling.num_samples // config.adjoint_matching.batch_size
-    finetune_steps = config.adjoint_matching.get("finetune_steps", finetune_steps)
 
     num_iterations = config.total_iterations // lagrangian_updates
     plotting_freq = num_iterations // 5
@@ -129,11 +128,12 @@ def main():
     if args.debug:
         config.augmented_lagrangian.sampling.num_samples = config.augmented_lagrangian.sampling.num_samples if torch.cuda.is_available() else 8
         config.adjoint_matching.sampling.num_samples = 16 if torch.cuda.is_available() else 4
-        config.adjoint_matching.batch_size = 4 if torch.cuda.is_available() else 1
+        config.adjoint_matching.batch_size = 4
         config.reward_sampling.num_samples = config.reward_sampling.num_samples if torch.cuda.is_available() else 8
+        finetune_steps = config.adjoint_matching.sampling.num_samples // config.adjoint_matching.batch_size
         plotting_freq = 1
         args.save_samples = False
-        num_iterations = 3
+        num_iterations = 2
         lagrangian_updates = 2
         print("Debug mode activated", flush=True)
 
@@ -191,8 +191,8 @@ def main():
     )
 
     # Initialize lists to store loss and rewards
-    alm_stats = []
     al_stats = []
+    full_stats = []
     al_best_reward = -1e8
     al_lowest_const_violations = 1.0
     al_best_epoch = 0
@@ -221,10 +221,10 @@ def main():
     # Compute reward for current samples
     _ = augmented_reward(dgl_mols)
     tmp_log = augmented_reward.get_statistics()
-    al_stats.append(tmp_log)
+    full_stats.append(tmp_log)
 
-    al_lowest_const_violations = al_stats[-1]["constraint_violations"]
-    al_best_reward = al_stats[-1]["reward"]
+    al_lowest_const_violations = full_stats[-1]["constraint_violations"]
+    al_best_reward = full_stats[-1]["reward"]
 
     alm = AugmentedLagrangian(
         config = config.augmented_lagrangian,
@@ -251,7 +251,7 @@ def main():
         # Get the current lambda and rho
         lambda_, rho_ = alm.get_current_lambda_rho()
         log = alm.get_statistics()
-        alm_stats.append(log)
+        al_stats.append(log)
 
         # Set the lambda and rho in the reward functional
         augmented_reward.set_lambda_rho(lambda_, rho_)
@@ -324,7 +324,7 @@ def main():
                       f"Constraint: {am_stats[-1]['constraint']:.4f}, Violations: {am_stats[-1]['constraint_violations']:.4f}", flush=True)
                 print(f"\tBest reward: {am_best_total_reward:.4f} in step {am_best_iteration}", flush=True)
 
-        al_stats.extend(am_stats)
+        full_stats.extend(am_stats)
 
         gen_model = copy.deepcopy(trainer.fine_model)
         if args.save_model and (k % 5 == 0) and k != lagrangian_updates:
@@ -333,10 +333,10 @@ def main():
             print(f"Model saved to {save_path}", flush=True)
 
         # Print final statistics
-        if al_stats[-1]["constraint_violations"] < al_lowest_const_violations:
-            al_lowest_const_violations = al_stats[-1]["constraint_violations"]
+        if full_stats[-1]["constraint_violations"] < al_lowest_const_violations:
+            al_lowest_const_violations = full_stats[-1]["constraint_violations"]
             al_best_epoch = k
-            al_best_reward = al_stats[-1]["reward"]
+            al_best_reward = full_stats[-1]["reward"]
 
         print(f"Best overall reward: {al_best_reward:.4f} with violations {al_lowest_const_violations:.4f} at epoch {al_best_epoch}", flush=True)
 
@@ -364,29 +364,25 @@ def main():
     if use_wandb:
         wandb.finish()
     
-    if not args.debug or True:
+    if not args.debug:
         OmegaConf.save(config, save_path / Path("config.yaml"))
-        al_stats[0]['loss'] = al_stats[1]['loss']
-        df_al = pd.DataFrame.from_records(al_stats)
-        df_al.to_csv(save_path / "alm_stats.csv", index=False)
-        df_alm = pd.DataFrame.from_dict(alm_stats)
+        full_stats[0]['loss'] = full_stats[1]['loss']
+        df_al = pd.DataFrame.from_records(full_stats)
+        df_al.to_csv(save_path / "full_stats.csv", index=False)
+        df_alm = pd.DataFrame.from_dict(al_stats)
         df_alm.to_csv(save_path / "al_stats.csv", index=False)
 
     # Plotting if enabled
-    if (args.save_plots and not args.debug) or True:
+    if args.save_plots and not args.debug:
         from utils.plotting import plot_graphs
         # Plot rewards and constraints
-        al_stats[0]['loss'] = al_stats[1]['loss']
-        df = pd.DataFrame.from_records(al_stats)
-        tmp_data = [df['total_rewards'], df['rewards'], df['constraints'], df['constraint_violations']]
-        tmp_titles = ["Total Rewards", "Rewards", "Constraints", "Constraint Violations"]
-        plot_graphs(tmp_data, tmp_titles, save_path=save_path / Path("rewards_constraints.png"), save_freq=plotting_freq)
-        # Plot loss
-        tmp_data = [df['loss']]
-        tmp_titles = ["Loss"]
-        plot_graphs(tmp_data, tmp_titles, save_path=save_path / Path("loss.png"), save_freq=plotting_freq)
+        full_stats[0]['loss'] = full_stats[1]['loss']
+        df = pd.DataFrame.from_records(full_stats)
+        tmp_data = [df['total_reward'], df['reward'], df['constraint'], df['constraint_violation'], df['loss']]
+        tmp_titles = ["Total Reward", "Reward", "Constraint", "Constraint Violation", "Loss"]
+        plot_graphs(tmp_data, tmp_titles, save_path=save_path / Path("full_stats.png"), save_freq=plotting_freq)
         # Plot lambda, rho and expected constraint
-        df_alm = pd.DataFrame.from_dict(alm_stats)
+        df_alm = pd.DataFrame.from_dict(al_stats)
         tmp_data = [df_alm["lambda"], df_alm["rho"], df_alm["expected_constraint"]]
         tmp_titles = ["Lambda", "Rho", "Expected Constraint"]
         plot_graphs(tmp_data, tmp_titles, save_path=save_path / Path("al_stats.png"))
@@ -402,7 +398,7 @@ def main():
         print(f"Samples saved to {save_path}", flush=True)
 
     print(f"--- Final ---", flush=True)
-    print(f"Final reward: {al_stats[-1]['reward']:.4f}", flush=True)
+    print(f"Final reward: {full_stats[-1]['reward']:.4f}", flush=True)
     end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"--- End ---", flush=True)
     print(f"End time: {end_time}", flush=True)
