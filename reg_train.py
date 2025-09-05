@@ -18,22 +18,40 @@ from dgl.dataloading import GraphDataLoader
 
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-from regessor.gnn import GNN
-from regessor.dataset import make_loaders  
+from regessor import GNN, MoleculeGNN, make_loaders  
 
 from utils.utils import set_seed
 
 
-def build_model(property: str, node_feats: int, edge_feats: int,
-                hidden_dim: int, depth: int, **kwargs) -> nn.Module:
-    return GNN(
-        property=property,
-        node_feats=node_feats,
-        edge_feats=edge_feats,
-        hidden_dim=hidden_dim,
-        depth=depth,
-        **kwargs
-    )
+def build_model(property: str, model:str, hidden_dim: int, depth: int, egnn_dict: Dict = None) -> nn.Module:
+    K_x = 3  # number of spatial dimensions (3D)
+    K_a = 10 # number of atom features
+    K_c = 6  # number of charge classes (0, +1, -1, +2)
+    K_e = 5  # number of bond types (none, single, double, triple, aromatic)
+
+    if model == "egnn":
+        model = MoleculeGNN(
+            property = property,
+            num_atom_types = K_a,
+            num_charge_classes = K_c,
+            num_bond_types = K_e,
+            hidden_dim = hidden_dim,
+            depth = depth,
+            use_gumbel = egnn_dict.get("use_gumbel", True),              # flip to False to use prob-weighted embeddings
+            gumbel_tau = 1.0,
+            gumbel_hard = True,
+            equivariant = egnn_dict.get("equivariant", True),             # True -> EGNN (SO(3)/E(n) equivariant); False -> edge-aware scalar
+            rbf_k = 16,
+        )
+    if model == "gnn":
+        model = GNN(
+            property = property,
+            node_feats = K_a + K_c + K_x,
+            edge_feats = K_e,
+            hidden_dim = hidden_dim,
+            depth = depth,
+        )
+    return model
 
 
 def warmup_cosine_scheduler(optimizer: torch.optim.Optimizer,
@@ -99,15 +117,16 @@ def save_checkpoint(state: Dict, ckpt_dir: str, filename: str):
 def train(
     experiment: str,
     property: str,
+    model_type: str,
     batch_size: int = 64,
     learning_rate: float = 1e-3,
     weight_decay: float = 1e-5,
     hidden_dim: int = 256,
     depth: int = 8,
+    use_gumbel: bool = True,
+    equivariant: bool = True,
     max_epochs: int = 100,
     warmup_steps: int = 1000,
-    node_feats: int = 19,
-    edge_feats: int = 5,
     grad_clip: float = 1.0,
     seed: int = 0,
     num_workers: int = 4,
@@ -127,7 +146,11 @@ def train(
     )
 
     # Model / Optim / Sched / Loss
-    model = build_model(property, node_feats, edge_feats, hidden_dim, depth).to(device)
+    egnn_dict = {
+        "use_gumbel": use_gumbel,
+        "equivariant": equivariant,
+    }
+    model = build_model(property, model_type, hidden_dim=hidden_dim, depth=depth, egnn_dict=egnn_dict).to(device)
     optimizer = Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     total_steps = max_epochs * max(1, len(train_loader))
     scheduler = warmup_cosine_scheduler(optimizer, total_steps, warmup_steps, min_lr=1e-6)
@@ -136,13 +159,14 @@ def train(
 
     # Logging / Checkpoints
     run_id = datetime.now().strftime("%m%d_%H%M")
-    ckpt_dir = f"pretrained_models/{property}/{run_id}"
+    ckpt_dir = f"pretrained_models/{property}/{model_type}/{run_id}"
     best_val = math.inf
     best_path = None
     epochs_no_improve = 0
 
     config ={
         "experiment": experiment,
+        "model_type": model_type,
         "property": property,
         "batch_size": batch_size,
         "learning_rate": learning_rate,
@@ -151,11 +175,11 @@ def train(
         "depth": depth,
         "max_epochs": max_epochs,
         "warmup_steps": warmup_steps,
-        "node_feats": node_feats,
-        "edge_feats": edge_feats,
         "grad_clip": grad_clip,
         "seed": seed,
         "amp": amp,
+        "use_gumbel": use_gumbel,
+        "equivariant": equivariant,
     }
 
     # WandB
@@ -163,13 +187,13 @@ def train(
         if wandb_project is None:
             wandb_project = f"gnn-molecular-{property}"
         if wandb_name is None:
-            wandb_name = f"{run_id}_bs{batch_size}_lr{learning_rate}_hd{hidden_dim}_d{depth}_me{max_epochs}"
+            wandb_name = f"{run_id}_{model_type}bs{batch_size}_lr{learning_rate}_hd{hidden_dim}_d{depth}"
         wandb.init(project=wandb_project, name=wandb_name, config=config)
         sweep_id = wandb.run.sweep_id if wandb.run.sweep_id else None
         if sweep_id is not None:
             print(f"WandB sweep ID: {sweep_id}")
             run_id = wandb.run.id
-            ckpt_dir = f"pretrained_models/{property}/{sweep_id}/{run_id}/"
+            ckpt_dir = f"pretrained_models/{property}/{model_type}/{sweep_id}/{run_id}/"
 
     # ---------------------------
     # Main loop
@@ -292,6 +316,7 @@ def train(
 def parse_args():
     p = argparse.ArgumentParser("Train GNN (plain PyTorch + DGL)")
     p.add_argument("-e", "--experiment", type=str, required=True, help="Path to data folder (same as before)")
+    p.add_argument("-m", "--model_type", type=str, default="gnn", help="One of: egnn, gnn")
     p.add_argument("--property", type=str, default="dipole",
                    help="One of: score, energy, homo, lumo, homolumo_gap, dipole, dipole_zero")
     p.add_argument("--seed", type=int, default=None)
@@ -301,9 +326,9 @@ def parse_args():
     p.add_argument("-hd", "--hidden_dim", type=int, default=256)
     p.add_argument("-d", "--depth", type=int, default=8)
     p.add_argument("-me", "--max_epochs", type=int, default=100)
+    p.add_argument("--use_gumbel", action="store_true")
+    p.add_argument("--equivariant", action="store_true")
     p.add_argument("--warmup_steps", type=int, default=1000)
-    p.add_argument("--node_feats", type=int, default=19)
-    p.add_argument("--edge_feats", type=int, default=5)
     p.add_argument("--num_workers", type=int, default=4)
     p.add_argument("--grad_clip", type=float, default=1.0)
     p.add_argument("--no_amp", action="store_true", help="Disable mixed precision")
@@ -327,15 +352,16 @@ if __name__ == "__main__":
     train(
         experiment=args.experiment,
         property=args.property,
+        model_type=args.model_type,
         batch_size=args.batch_size,
         learning_rate=args.learning_rate,
         weight_decay=args.weight_decay,
         hidden_dim=args.hidden_dim,
         depth=args.depth,
         max_epochs=args.max_epochs,
+        use_gumbel=args.use_gumbel,
+        equivariant=args.equivariant,
         warmup_steps=args.warmup_steps,
-        node_feats=args.node_feats,
-        edge_feats=args.edge_feats,
         grad_clip=args.grad_clip,
         seed=args.seed,
         num_workers=args.num_workers,
@@ -343,6 +369,6 @@ if __name__ == "__main__":
         wandb_project=args.wandb_project,
         wandb_name=args.wandb_name,
         early_stop_patience=args.early_stop_patience,
-        amp=not args.no_amp,
+        amp=not args.no_amp and torch.cuda.is_available(),
     )
 
