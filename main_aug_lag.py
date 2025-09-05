@@ -105,6 +105,10 @@ def main():
     n_atoms = config.get("n_atoms", None)
     min_num_atoms = config.get("min_num_atoms", None)
     max_num_atoms = config.get("max_num_atoms", None)
+    # update config.adjoint_matching.sampling
+    config.adjoint_matching.sampling.n_atoms = n_atoms
+    config.adjoint_matching.sampling.min_num_atoms = min_num_atoms
+    config.adjoint_matching.sampling.max_num_atoms = max_num_atoms
 
     # Augmented Lagrangian Parameters
     lagrangian_updates = config.augmented_lagrangian.lagrangian_updates
@@ -121,10 +125,6 @@ def main():
     baseline = args.baseline
     if baseline:
         base_lambda = config.augmented_lagrangian.base_lambda
-
-    config.augmented_lagrangian.sampling.sampler_type = "euler"
-    config.adjoint_matching.sampling.sampler_type = "memoryless"
-    config.reward_sampling.sampler_type = "euler"
 
     if args.debug:
         # config.augmented_lagrangian.sampling.num_samples = 24

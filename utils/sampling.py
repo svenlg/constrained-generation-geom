@@ -42,7 +42,7 @@ def sampling(
         if not isinstance(n_atoms, int) or (n_atoms <= MIN_ALLOWED_ATOMS-1) or (n_atoms >= MAX_ALLOWED_ATOMS+1):
             raise ValueError(f"n_atoms must be a positive int between {MIN_ALLOWED_ATOMS} and {MAX_ALLOWED_ATOMS}, got {n_atoms!r}")
         
-        new_molecules, _ = model.sample(
+        new_molecules = model.sample(
             n_atoms=torch.tensor([n_atoms] * config.num_samples),
             n_timesteps=config.num_integration_steps + 1,
             device=device,
@@ -65,7 +65,7 @@ def sampling(
                 f"Must satisfy: min_num_atoms < max_num_atoms, max_num_atoms >= {MIN_ALLOWED_ATOMS}, min_num_atoms <= {MAX_ALLOWED_ATOMS}."
             )
 
-        new_molecules, _ = model.sample_random_sizes(
+        new_molecules = model.sample_random_sizes(
             n_molecules=config.num_samples,
             n_timesteps=config.num_integration_steps + 1,
             device=device,
