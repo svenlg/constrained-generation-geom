@@ -167,6 +167,11 @@ def main():
     print(f"\tfinetune_steps: {finetune_steps}", flush=True)
     print(f"\tnum_iterations: {num_iterations}", flush=True)
 
+    print(f"Molecular Generation Parameters", flush=True)
+    print(f"\tn_atoms: {n_atoms}", flush=True)
+    print(f"\tmin_num_atoms: {min_num_atoms}", flush=True)
+    print(f"\tmax_num_atoms: {max_num_atoms}", flush=True)
+
     # Setup - Gen Model
     base_model = setup_gen_model(config.flow_model, device=device)
     gen_model = copy.deepcopy(base_model)
