@@ -127,11 +127,10 @@ def main():
         base_lambda = config.augmented_lagrangian.base_lambda
 
     if args.debug:
-        # config.augmented_lagrangian.sampling.num_samples = 24
-        config.adjoint_matching.sampling.num_samples = 16
-        config.adjoint_matching.batch_size = 4
-        # config.adjoint_matching.finetune_steps = 4
-        # config.reward_sampling.num_samples = 10
+        config.augmented_lagrangian.sampling.num_samples = config.augmented_lagrangian.sampling.num_samples if torch.cuda.is_available() else 8
+        config.adjoint_matching.sampling.num_samples = 16 if torch.cuda.is_available() else 4
+        config.adjoint_matching.batch_size = 4 if torch.cuda.is_available() else 1
+        config.reward_sampling.num_samples = config.reward_sampling.num_samples if torch.cuda.is_available() else 8
         plotting_freq = 1
         args.save_samples = False
         num_iterations = 3
@@ -192,7 +191,7 @@ def main():
     )
 
     # Initialize lists to store loss and rewards
-    alm_stats = {"lambda": [], "rho": [], "expected_constraint": []}
+    alm_stats = []
     al_stats = []
     al_best_reward = -1e8
     al_lowest_const_violations = 1.0
@@ -252,8 +251,7 @@ def main():
         # Get the current lambda and rho
         lambda_, rho_ = alm.get_current_lambda_rho()
         log = alm.get_statistics()
-        for key in alm_stats:
-            alm_stats[key].append(float(log[key]))
+        alm_stats.append(log)
 
         # Set the lambda and rho in the reward functional
         augmented_reward.set_lambda_rho(lambda_, rho_)
@@ -366,7 +364,7 @@ def main():
     if use_wandb:
         wandb.finish()
     
-    if not args.debug:
+    if not args.debug or True:
         OmegaConf.save(config, save_path / Path("config.yaml"))
         al_stats[0]['loss'] = al_stats[1]['loss']
         df_al = pd.DataFrame.from_records(al_stats)
@@ -375,7 +373,7 @@ def main():
         df_alm.to_csv(save_path / "al_stats.csv", index=False)
 
     # Plotting if enabled
-    if args.save_plots and not args.debug:
+    if (args.save_plots and not args.debug) or True:
         from utils.plotting import plot_graphs
         # Plot rewards and constraints
         al_stats[0]['loss'] = al_stats[1]['loss']

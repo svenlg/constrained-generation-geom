@@ -3,6 +3,7 @@ from omegaconf import OmegaConf
 import torch
 import flowmol
 import copy
+import dgl
 
 
 MAX_ALLOWED_ATOMS = 75  # upper bound for molecule size (can be upto 182 for GEOM)
@@ -76,5 +77,7 @@ def sampling(
     dgl_mols, rd_mols = [], []
     for mol in new_molecules:
         dgl_mols.append(copy.deepcopy(mol.g))
-        rd_mols.append(copy.deepcopy(mol.rdkit_mol()))
+        rd_mols.append(copy.deepcopy(mol.rdkit_mol))
+    
+    dgl_mols = dgl.batch(dgl_mols).to(device)
     return dgl_mols, rd_mols
