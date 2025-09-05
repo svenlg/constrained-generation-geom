@@ -23,14 +23,6 @@ RDLogger.DisableLog('rdApp.*')
 logging.getLogger("rdkit").setLevel(logging.CRITICAL)
 
 
-ALL_COLS = ['mol_pred_loaded', 
-            'sanitization', 'inchi_convertible', 'all_atoms_connected', 
-            'bond_lengths', 'bond_angles', 'internal_steric_clash', 'aromatic_ring_flatness', 
-            'non-aromatic_ring_non-flatness', 'double_bond_flatness',
-            'internal_energy']
-
-COLS_TO_KEEP = ['sanitization', 'inchi_convertible', 'all_atoms_connected', 'internal_energy']
-
 REMOVE_NODE_KEYS = ['x_0', 'a_0', 'c_0', 'x_1_pred', 'a_1_pred', 'c_1_pred', 'x_1', 'a_1', 'c_1']
 REMOVE_EDGE_KEYS = ['e_0', 'e_1_pred', 'e_1']
 
@@ -113,14 +105,7 @@ def main(args):
             ######
             # Get PoseBusters Feedback
             tmp_time = time.time()
-            buster = PoseBusters(config="mol")
-            df_scores = buster.bust(rd_mols)
-            df_scores = df_scores.reset_index(drop=True)
-            df_scores = df_scores[COLS_TO_KEEP]
-
-            # Make Scores
-            scores = posebusters_score(df_scores)
-            df_scores['score'] = scores.to_numpy()
+            df_scores = posebusters_score(rd_mols)
             print(f"PoseBusters time: {time.time() - tmp_time:.2f} seconds", flush=True)
 
             ######

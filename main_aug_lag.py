@@ -5,6 +5,7 @@ import os.path as osp
 import time
 import copy
 import wandb
+import pandas as pd
 import torch
 import torch.nn as nn
 import numpy as np
@@ -14,6 +15,7 @@ from omegaconf import OmegaConf
 
 from utils.setup import parse_args, update_config_with_args
 from utils.utils import extract_trailing_numbers, set_seed
+from utils.sampling import sampling
 
 import dgl
 import flowmol
@@ -43,18 +45,19 @@ def load_regressor(property: str, date: str, device: torch.device) -> nn.Module:
     model.load_state_dict(state["model_state"])
     return model
 
-# Sampling
-def sampling(config: OmegaConf, model: flowmol.FlowMol, device: torch.device):
-    model.to(device)
-    new_molecules, _ = model.sample_random_sizes(
-        sampler_type = config.sampler_type,
-        n_molecules = config.num_samples, 
-        n_timesteps = config.num_integration_steps + 1, 
-        device = device,
-        keep_intermediate_graphs = True,
-    )
-    return new_molecules
-
+# # Sampling
+# def sampling(config: OmegaConf, model: flowmol.FlowMol, device: torch.device,
+#              min_num_atoms: int = None, max_num_atoms: int = None,
+#              n_atoms: int = None):
+#     model.to(device)
+#     new_molecules, _ = model.sample_random_sizes(
+#         sampler_type = config.sampler_type,
+#         n_molecules = config.num_samples, 
+#         n_timesteps = config.num_integration_steps + 1, 
+#         device = device,
+#         keep_intermediate_graphs = True,
+#     )
+#     return new_molecules
 
 def main():
     # Parse command line arguments
@@ -97,6 +100,11 @@ def main():
         save_path.mkdir(parents=True, exist_ok=True)
         print(f"Run will be saved at:")
         print(save_path)
+
+    # Molecular generation parameters
+    n_atoms = config.get("n_atoms", None)
+    min_num_atoms = config.get("min_num_atoms", None)
+    max_num_atoms = config.get("max_num_atoms", None)
 
     # Augmented Lagrangian Parameters
     lagrangian_updates = config.augmented_lagrangian.lagrangian_updates
@@ -184,12 +192,8 @@ def main():
     )
 
     # Initialize lists to store loss and rewards
-    al_stats = {"lambda": [], "rho": [], "expected_constraint": []}
-    al_total_rewards = []
-    al_rewards = []
-    al_constraints = []
-    al_constraint_violations = []
-    al_losses = []
+    alm_stats = {"lambda": [], "rho": [], "expected_constraint": []}
+    al_stats = []
     al_best_reward = -1e8
     al_lowest_const_violations = 1.0
     al_best_epoch = 0
@@ -200,28 +204,28 @@ def main():
 
     # Generate Samples
     tmp_model = copy.deepcopy(gen_model)
-    new_molecules = sampling(
+    dgl_mols, rd_mols = sampling(
         config.reward_sampling,
         tmp_model,
-        device=device
+        device=device,
+        n_atoms=n_atoms,
+        min_num_atoms=min_num_atoms,
+        max_num_atoms=max_num_atoms,
     )
     del tmp_model
     if args.save_samples:
         tmp_save_path = str(sample_path / Path("samples_0.bin"))
-        tmp_samples = [graph for graph in dgl.unbatch(new_molecules.cpu())]
+        tmp_samples = [graph for graph in dgl.unbatch(dgl_mols.cpu())]
         save_graphs(tmp_save_path, tmp_samples)
         del tmp_samples
 
     # Compute reward for current samples
-    _ = augmented_reward(new_molecules)
+    _ = augmented_reward(dgl_mols)
     tmp_log = augmented_reward.get_statistics()
-    al_total_rewards.append(tmp_log["total_reward"])
-    al_rewards.append(tmp_log["reward"])
-    al_constraints.append(tmp_log["constraint"])
-    al_constraint_violations.append(tmp_log["constraint_violations"])
+    al_stats.append(tmp_log)
 
-    al_lowest_const_violations = al_constraint_violations[-1]
-    al_best_reward = al_rewards[-1]
+    al_lowest_const_violations = al_stats[-1]["constraint_violations"]
+    al_best_reward = al_stats[-1]["reward"]
 
     alm = AugmentedLagrangian(
         config = config.augmented_lagrangian,
@@ -230,7 +234,7 @@ def main():
         device = device,
     )
     # Set initial expected constraint (only needed for logging)
-    _ = alm.expected_constraint(new_molecules)
+    _ = alm.expected_constraint(dgl_mols)
 
     # Log al initial states
     if use_wandb:
@@ -248,8 +252,8 @@ def main():
         # Get the current lambda and rho
         lambda_, rho_ = alm.get_current_lambda_rho()
         log = alm.get_statistics()
-        for key in al_stats:
-            al_stats[key].append(float(log[key]))
+        for key in alm_stats:
+            alm_stats[key].append(float(log[key]))
 
         # Set the lambda and rho in the reward functional
         augmented_reward.set_lambda_rho(lambda_, rho_)
@@ -267,11 +271,7 @@ def main():
             verbose = args.debug,
         )
 
-        am_total_rewards = []
-        am_rewards = []
-        am_constraints = []
-        am_constraint_violations = []
-        am_losses = []
+        am_stats = []
         am_best_total_reward = -1e8
         am_best_iteration = 0
 
@@ -289,47 +289,44 @@ def main():
             del dataset
 
             if i % plotting_freq == 0:
-                am_losses.append(loss/reward_lambda/(traj_len//2))
 
                 # Generate Samples
                 tmp_model = copy.deepcopy(trainer.fine_model)
-                new_molecules = sampling(
+                dgl_mols, rd_mols = sampling(
                     config.reward_sampling,
                     tmp_model,
-                    device=device
+                    device=device,
+                    n_atoms=n_atoms,
+                    min_num_atoms=min_num_atoms,
+                    max_num_atoms=max_num_atoms,
                 )
                 del tmp_model
 
                 # Compute reward for current samples
-                _ = augmented_reward(new_molecules)
-                del new_molecules
+                _ = augmented_reward(dgl_mols)
+                del dgl_mols
                 tmp_log = augmented_reward.get_statistics()
-                am_total_rewards.append(tmp_log["total_reward"])
-                am_rewards.append(tmp_log["reward"])
-                am_constraints.append(tmp_log["constraint"])
-                am_constraint_violations.append(tmp_log["constraint_violations"])
-                
-                if am_total_rewards[-1] > am_best_total_reward:
-                    am_best_total_reward = am_total_rewards[-1]
+                tmp_log["loss"] = loss/reward_lambda/(traj_len//2)
+                am_stats.append(tmp_log)
+
+                if am_stats[-1]["total_reward"] > am_best_total_reward:
+                    am_best_total_reward = am_stats[-1]["total_reward"]
                     am_best_iteration = i
 
                 if use_wandb:
                     logs = {}
                     logs.update(tmp_log)
-                    logs.update({"loss": am_losses[-1],
+                    logs.update({"loss": tmp_log["loss"],
                                  "total_best_reward": am_best_total_reward})
                     log = alm.get_statistics()
                     logs.update(log)
                     wandb.log(logs)
 
-                print(f"\tIteration {i}: Total Reward: {am_total_rewards[-1]:.4f}, Reward: {am_rewards[-1]:.4f}, Constraint: {am_constraints[-1]:.4f}, Violations: {am_constraint_violations[-1]:.4f}", flush=True)
+                print(f"\tIteration {i}: Total Reward: {am_stats[-1]['total_reward']:.4f}, Reward: {am_stats[-1]['reward']:.4f}, "
+                      f"Constraint: {am_stats[-1]['constraint']:.4f}, Violations: {am_stats[-1]['constraint_violations']:.4f}", flush=True)
                 print(f"\tBest reward: {am_best_total_reward:.4f} in step {am_best_iteration}", flush=True)
 
-        al_losses.extend(am_losses)
-        al_total_rewards.extend(am_total_rewards)
-        al_rewards.extend(am_rewards)
-        al_constraints.extend(am_constraints)
-        al_constraint_violations.extend(am_constraint_violations)
+        al_stats.extend(am_stats)
 
         gen_model = copy.deepcopy(trainer.fine_model)
         if args.save_model and (k % 5 == 0) and k != lagrangian_updates:
@@ -337,30 +334,33 @@ def main():
             torch.save(gen_model.cpu().state_dict(), save_path / Path(f"model_{k}.pth"))
             print(f"Model saved to {save_path}", flush=True)
 
-        # Print final statistics        
-        if al_constraint_violations[-1] < al_lowest_const_violations:
-            al_lowest_const_violations = al_constraint_violations[-1]
+        # Print final statistics
+        if al_stats[-1]["constraint_violations"] < al_lowest_const_violations:
+            al_lowest_const_violations = al_stats[-1]["constraint_violations"]
             al_best_epoch = k
-            al_best_reward = al_rewards[-1]
+            al_best_reward = al_stats[-1]["reward"]
 
         print(f"Best overall reward: {al_best_reward:.4f} with violations {al_lowest_const_violations:.4f} at epoch {al_best_epoch}", flush=True)
 
         # Generate Samples and update the augmented lagrangian parameters
         tmp_model = copy.deepcopy(gen_model)
-        new_molecules = sampling(
+        dgl_mols, rd_mols = sampling(
             config.reward_sampling,
             tmp_model,
-            device=device
+            device=device,
+            n_atoms=n_atoms,
+            min_num_atoms=min_num_atoms,
+            max_num_atoms=max_num_atoms
         )
         del tmp_model
         if args.save_samples:
             tmp_save_path = str(sample_path / Path(f"samples_{k}.bin"))
-            tmp_samples = [graph for graph in dgl.unbatch(new_molecules.cpu())]
+            tmp_samples = [graph for graph in dgl.unbatch(dgl_mols.cpu())]
             save_graphs(tmp_save_path, tmp_samples)
             del tmp_samples
-        
-        alm.update_lambda_rho(new_molecules)
-        del new_molecules, trainer
+
+        alm.update_lambda_rho(dgl_mols)
+        del dgl_mols, rd_mols, trainer
     
     # Finish wandb run
     if use_wandb:
@@ -368,38 +368,28 @@ def main():
     
     if not args.debug:
         OmegaConf.save(config, save_path / Path("config.yaml"))
-        results = {
-            "total_rewards": np.array(al_total_rewards),
-            "rewards": np.array(al_rewards),
-            "constraints": np.array(al_constraints),
-            "constraint_violations": np.array(al_constraint_violations),
-            "losses": np.array([al_losses[0]] + al_losses),
-        }
-        np.savez(save_path / "results.npz", **results)
-        np.savez(
-            save_path / "alm_stats.npz",
-            lambda_=np.array(al_stats["lambda"]),
-            rho=np.array(al_stats["rho"]),
-            expected_constraint=np.array(al_stats["expected_constraint"]),
-        )
+        al_stats[0]['loss'] = al_stats[1]['loss']
+        df_al = pd.DataFrame.from_records(al_stats)
+        df_al.to_csv(save_path / "alm_stats.csv", index=False)
+        df_alm = pd.DataFrame.from_dict(alm_stats)
+        df_alm.to_csv(save_path / "al_stats.csv", index=False)
 
     # Plotting if enabled
     if args.save_plots and not args.debug:
         from utils.plotting import plot_graphs
         # Plot rewards and constraints
-        tmp_data = [al_total_rewards, al_rewards, al_constraints, al_constraint_violations]
+        al_stats[0]['loss'] = al_stats[1]['loss']
+        df = pd.DataFrame.from_records(al_stats)
+        tmp_data = [df['total_rewards'], df['rewards'], df['constraints'], df['constraint_violations']]
         tmp_titles = ["Total Rewards", "Rewards", "Constraints", "Constraint Violations"]
         plot_graphs(tmp_data, tmp_titles, save_path=save_path / Path("rewards_constraints.png"), save_freq=plotting_freq)
-        # Plot losses
-        tmp_data = [al_losses]
-        tmp_titles = ["Losses"]
-        plot_graphs(tmp_data, tmp_titles, save_path=save_path / Path("losses.png"), save_freq=plotting_freq)
+        # Plot loss
+        tmp_data = [df['loss']]
+        tmp_titles = ["Loss"]
+        plot_graphs(tmp_data, tmp_titles, save_path=save_path / Path("loss.png"), save_freq=plotting_freq)
         # Plot lambda, rho and expected constraint
-        lambda_ = al_stats["lambda"]
-        rho_ = al_stats["rho"]
-        expected_constraint = al_stats["expected_constraint"]
-        # constraint_violations = al_stats["constraint_violations"]
-        tmp_data = [lambda_, rho_, expected_constraint]
+        df_alm = pd.DataFrame.from_dict(alm_stats)
+        tmp_data = [df_alm["lambda"], df_alm["rho"], df_alm["expected_constraint"]]
         tmp_titles = ["Lambda", "Rho", "Expected Constraint"]
         plot_graphs(tmp_data, tmp_titles, save_path=save_path / Path("al_stats.png"))
         print(f"Saved plots to {save_path}", flush=True)
@@ -414,7 +404,7 @@ def main():
         print(f"Samples saved to {save_path}", flush=True)
 
     print(f"--- Final ---", flush=True)
-    print(f"Final reward: {al_total_rewards[-1]:.4f}", flush=True)
+    print(f"Final reward: {al_stats[-1]['reward']:.4f}", flush=True)
     end_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"--- End ---", flush=True)
     print(f"End time: {end_time}", flush=True)

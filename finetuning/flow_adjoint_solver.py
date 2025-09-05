@@ -71,61 +71,6 @@ class LeanAdjointSolverFlow:
         self.interpolant_scheduler = gen_model.interpolant_scheduler
         self.grad_reward_fn = grad_reward_fn
         self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    
-    # def step(self, adj, g_t, t, alpha, alpha_dot, dt, upper_edge_mask):
-        
-    #     with torch.enable_grad():
-    #         # turn on autograd for the graph
-    #         g_t.ndata["x_t"] = g_t.ndata["x_t"].detach().requires_grad_(True)
-    #         g_t.ndata["a_t"] = g_t.ndata["a_t"].detach().requires_grad_(True)
-    #         g_t.ndata["c_t"] = g_t.ndata["c_t"].detach().requires_grad_(True)
-    #         g_t.edata["e_t"] = g_t.edata["e_t"].detach().requires_grad_(True)
-
-    #         node_batch_idx = torch.zeros(g_t.num_nodes(), dtype=torch.long)
-
-    #         # predict the destination of the trajectory given the current time-point
-    #         dst_dict = self.model.vector_field(
-    #             g_t, 
-    #             t=torch.full((g_t.batch_size,), t, device=g_t.device),
-    #             node_batch_idx=node_batch_idx,
-    #             upper_edge_mask=upper_edge_mask,
-    #             apply_softmax=True,
-    #             remove_com=True
-    #         )
-
-    #         # take integration step for all features
-    #         v = {}
-    #         v_pred = {}
-
-    #         for feat in ['x', 'a', 'c']:
-    #             x_1 = dst_dict[feat]
-    #             x_t = g_t.ndata[f'{feat}_t']
-    #             adj_t_feat = adj[feat].detach()
-
-    #             v_pred[feat] = self.model.vector_field.vector_field(x_t, x_1, alpha[0], alpha_dot[0])
-
-    #             eps_pred = 2 * v_pred[feat] - alpha_dot[0]/(alpha[0]+dt) * x_t
-    #             g_term = (adj_t_feat * eps_pred).sum()
-    #             v[feat] = torch.autograd.grad(g_term, x_t, retain_graph=True)[0]
-
-    #         for feat in ['e']:
-    #             x_1 = dst_dict[feat]
-    #             x_t = g_t.edata[f'{feat}_t'][upper_edge_mask]
-    #             adj_t_feat = adj[feat].detach()
-
-    #             v_pred[feat] = self.model.vector_field.vector_field(x_t, x_1, alpha[0], alpha_dot[0])
-
-    #             eps_pred = 2 * v_pred[feat] - alpha_dot[0]/(alpha[0]+dt) * x_t
-    #             g_term = (adj_t_feat * eps_pred).sum()
-    #             v[feat] = torch.autograd.grad(g_term, x_t, retain_graph=False)[0]
-
-    #     adj_tmh = {}
-    #     for feat in ['x', 'a', 'c', 'e']:
-    #         adj_tmh[feat] = adj[feat].detach() + dt * v[feat].detach()
-    #         adj_tmh[feat].detach()
-    #         v_pred[feat].detach()
-
-    #     return adj_tmh, v_pred
 
     def solve(self, graph_trajectories, ts):
         """Solving loop."""

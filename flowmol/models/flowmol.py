@@ -443,19 +443,17 @@ class FlowMol(pl.LightningModule):
     def sample_random_sizes(self, n_molecules: int, device="cuda:0",
                             stochasticity=None, high_confidence_threshold=None, 
                             xt_traj=False, ep_traj=False, sampler_type:str='euler',
-                            min_mol_size:int=None, max_mol_size:int=None,
+                            min_num_atoms:int=None, max_num_atoms:int=None,
                             keep_intermediate_graphs:bool=False, **kwargs):
         """Sample n_molecules with the number of atoms sampled from the distribution of the training set."""
 
         # get the number of atoms that will be in each molecules
-        if min_mol_size is None and max_mol_size is None:
+        if min_num_atoms is None and max_num_atoms is None:
             atoms_per_molecule = self.sample_n_atoms(n_molecules).to(device)
         else:
-            if min_mol_size >= max_mol_size or max_mol_size <= 0 or min_mol_size >= 182:
-                raise ValueError("min_mol_size must be less than max_mol_size and greater than 0 and less than 182")
             while True:
                 atoms_per_molecule = self.sample_n_atoms(n_molecules*2).to(device)
-                atoms_per_molecule = atoms_per_molecule[ (atoms_per_molecule >= min_mol_size) & (atoms_per_molecule <= max_mol_size) ]
+                atoms_per_molecule = atoms_per_molecule[ (atoms_per_molecule >= min_num_atoms) & (atoms_per_molecule <= max_num_atoms) ]
                 if len(atoms_per_molecule) >= n_molecules:
                     atoms_per_molecule = atoms_per_molecule[:n_molecules]
                     break
