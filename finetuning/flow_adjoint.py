@@ -143,6 +143,7 @@ def adj_matching_loss_list_of_dicts(v_base, v_fine, adj, sigma):
 
 def sampling(
     config: OmegaConf,
+    batch_size: int,
     model: flowmol.FlowMol,
     device: torch.device,
 ):
@@ -160,7 +161,7 @@ def sampling(
         
         _, graph_trajectories = model.sample(
             sampler_type = config.sampler_type,
-            n_atoms=torch.tensor([config.n_atoms] * config.num_samples),
+            n_atoms=torch.tensor([config.n_atoms] * batch_size, device=device),
             n_timesteps=config.num_integration_steps + 1,
             device=device,
             keep_intermediate_graphs = True,
@@ -185,7 +186,7 @@ def sampling(
 
         _, graph_trajectories = model.sample_random_sizes(
             sampler_type = config.sampler_type,
-            n_molecules=config.num_samples,
+            n_molecules=batch_size,
             n_timesteps=config.num_integration_steps + 1,
             device=device,
             min_num_atoms=config.min_num_atoms,
@@ -258,6 +259,7 @@ class AdjointMatchingFinetuningTrainerFlowMol:
             
         graph_trajectories = sampling(
             config = self.sampling_config,
+            batch_size = self.config.batch_size,
             model = self.fine_model,
             device = self.device,
         )

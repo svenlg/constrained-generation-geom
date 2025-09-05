@@ -5,12 +5,12 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run ALM with optional parameter overrides")
     # Settings
     parser.add_argument("--debug", action='store_true')
+    parser.add_argument("--experiment", type=str,
+                        help="Name of the experiment")
     parser.add_argument("--output_end", type=str,
                         help="Path to output directory")
     parser.add_argument("--use_wandb", action='store_true',
                         help="Use wandb, default: false")
-    parser.add_argument("--verbose", action='store_true', 
-                        help="Verbose output, default: false")
     parser.add_argument("--save_model", action='store_true',
                         help="Save the model, default: false")
     parser.add_argument("--save_samples", action='store_true',
@@ -68,10 +68,20 @@ def parse_args():
                         help="Override adjoint_matching.finetune_steps in config")
     parser.add_argument("--num_iterations", type=int,
                         help="Override number of iterations")
+    # Number of Atoms per Molecule
+    parser.add_argument("--n_atoms", type=int,
+                        help="Number of atoms per molecule, int or null")
+    parser.add_argument("--min_num_atoms", type=int,
+                        help="Minimum number of atoms per molecule, int or null")
+    parser.add_argument("--max_num_atoms", type=int,
+                        help="Maximum number of atoms per molecule, int or null")
     return parser.parse_args()
 
 
 def update_config_with_args(config, args):
+    # Settings
+    if args.experiment is not None:
+        config.experiment = args.experiment
     # FlowMol arguments
     if args.flow_model is not None:
         config.flow_model = args.flow_model
@@ -129,5 +139,11 @@ def update_config_with_args(config, args):
         config.adjoint_matching.finetune_steps = args.finetune_steps
     if args.num_iterations is not None:
         config.adjoint_matching.num_iterations = args.num_iterations
+    if args.n_atoms is not None:
+        config.n_atoms = args.n_atoms
+    if args.min_num_atoms is not None:
+        config.min_num_atoms = args.min_num_atoms
+    if args.max_num_atoms is not None:
+        config.max_num_atoms = args.max_num_atoms
     return config
 

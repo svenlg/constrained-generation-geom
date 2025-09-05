@@ -452,7 +452,7 @@ class FlowMol(pl.LightningModule):
             atoms_per_molecule = self.sample_n_atoms(n_molecules).to(device)
         else:
             while True:
-                atoms_per_molecule = self.sample_n_atoms(n_molecules*2).to(device)
+                atoms_per_molecule = self.sample_n_atoms(n_molecules*10).to(device)
                 atoms_per_molecule = atoms_per_molecule[ (atoms_per_molecule >= min_num_atoms) & (atoms_per_molecule <= max_num_atoms) ]
                 if len(atoms_per_molecule) >= n_molecules:
                     atoms_per_molecule = atoms_per_molecule[:n_molecules]
