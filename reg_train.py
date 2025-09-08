@@ -199,12 +199,12 @@ def train(
     # Main loop
     # ---------------------------
     print(f"Starting training on {property} for max {max_epochs} epochs:", flush=True)
-    print(f"Parameter:")
+    tmp = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Parameters in model: {tmp}")
+    print(f"Config:")
     for key, value in config.items():
         print(f"  {key}: {value}")
     print()
-    tmp = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"Parameters in model: {tmp}")
 
     for epoch in range(1, max_epochs + 1):
         model.train()

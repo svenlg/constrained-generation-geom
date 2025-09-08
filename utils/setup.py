@@ -139,6 +139,7 @@ def update_config_with_args(config, args):
         config.adjoint_matching.finetune_steps = args.finetune_steps
     if args.num_iterations is not None:
         config.adjoint_matching.num_iterations = args.num_iterations
+    # Number of atoms
     if args.n_atoms is not None:
         config.n_atoms = args.n_atoms
     if args.min_num_atoms is not None:

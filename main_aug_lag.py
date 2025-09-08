@@ -250,6 +250,7 @@ def main():
         wandb.log(logs)
 
     #### AUGMENTED LAGRANGIAN - BEGIN ####
+    total_steps_made = 0
     for k in range(1, lagrangian_updates + 1):
         print(f"--- AL Round {k}/{lagrangian_updates} ---", flush=True)
 
@@ -290,8 +291,10 @@ def main():
             # Fine-tune the model with adjoint matching loss
             loss = trainer.finetune(dataset, steps=finetune_steps)
             del dataset
-
-            if i % plotting_freq == 0:
+            
+            # if i % plotting_freq == 0:
+            total_steps_made += 1
+            if total_steps_made % 10 == 0:
 
                 # Generate Samples
                 tmp_model = copy.deepcopy(trainer.fine_model)
@@ -328,6 +331,8 @@ def main():
                 print(f"\tIteration {i}: Total Reward: {am_stats[-1]['total_reward']:.4f}, Reward: {am_stats[-1]['reward']:.4f}, "
                       f"Constraint: {am_stats[-1]['constraint']:.4f}, Violations: {am_stats[-1]['constraint_violations']:.4f}", flush=True)
                 print(f"\tBest reward: {am_best_total_reward:.4f} in step {am_best_iteration}", flush=True)
+        
+
 
         full_stats.extend(am_stats)
 
