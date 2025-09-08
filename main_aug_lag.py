@@ -383,8 +383,8 @@ def main():
         # Plot rewards and constraints
         full_stats[0]['loss'] = full_stats[1]['loss']
         df = pd.DataFrame.from_records(full_stats)
-        tmp_data = [df['total_reward'], df['reward'], df['constraint'], df['constraint_violation'], df['loss']]
-        tmp_titles = ["Total Reward", "Reward", "Constraint", "Constraint Violation", "Loss"]
+        tmp_data = [df['total_reward'], df['reward'], df['constraint'], df['constraint_violations'], df['loss']]
+        tmp_titles = ["Total Reward", "Reward", "Constraint", "Constraint Violations", "Loss"]
         plot_graphs(tmp_data, tmp_titles, save_path=save_path / Path("full_stats.png"), save_freq=plotting_freq)
         # Plot lambda, rho and expected constraint
         df_alm = pd.DataFrame.from_dict(al_stats)
