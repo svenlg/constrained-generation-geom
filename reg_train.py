@@ -347,9 +347,14 @@ if __name__ == "__main__":
     if args.debug:
         print("DEBUG MODE")
         args.max_epochs = 10
-        args.batch_size = 16
-        args.hidden_dim = 64
-        args.depth = 4
+        if torch.cuda.is_available():
+            args.batch_size = 64
+            args.hidden_dim = 192
+            args.depth = 6
+        else:
+            args.batch_size = 16
+            args.hidden_dim = 64
+            args.depth = 3
         args.use_wandb = False
     train(
         experiment=args.experiment,

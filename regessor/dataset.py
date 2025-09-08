@@ -26,10 +26,12 @@ class GenDataset(Dataset):
         self, 
         property: str,
         experiment: str, 
+        max_nodes: int = 60,
         split: str = "train",
     ):
         self.experiment = experiment
         self.split = split
+        self.max_nodes = max_nodes
         if property == "dipole_zero":
             self.property = "dipole"
             self.set_zero_dipole = True
@@ -53,7 +55,12 @@ class GenDataset(Dataset):
         return len(self.df)
 
     def __getitem__(self, idx: int) -> Tuple[dgl.DGLGraph, torch.Tensor]:
-        mol = self._load_mols(idx)
+        while True:
+            mol = self._load_mols(idx)
+            num_atoms = mol.num_nodes()
+            if num_atoms <= self.max_nodes:
+                break
+            idx = self.df.sample().index[0]
 
         target_value = torch.tensor(self.df.iloc[idx][self.property], dtype=torch.float32)
         if self.set_zero_dipole:
