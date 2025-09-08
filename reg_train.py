@@ -203,6 +203,8 @@ def train(
     for key, value in config.items():
         print(f"  {key}: {value}")
     print()
+    tmp = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Parameters in model: {tmp}")
 
     for epoch in range(1, max_epochs + 1):
         model.train()
@@ -326,8 +328,8 @@ def parse_args():
     p.add_argument("-hd", "--hidden_dim", type=int, default=256)
     p.add_argument("-d", "--depth", type=int, default=8)
     p.add_argument("-me", "--max_epochs", type=int, default=100)
-    p.add_argument("--use_gumbel", action="store_true")
-    p.add_argument("--equivariant", action="store_true")
+    p.add_argument("--not_use_gumbel", action="store_false")
+    p.add_argument("--non_equivariant", action="store_false")
     p.add_argument("--warmup_steps", type=int, default=1000)
     p.add_argument("--num_workers", type=int, default=4)
     p.add_argument("--grad_clip", type=float, default=1.0)
@@ -359,8 +361,8 @@ if __name__ == "__main__":
         hidden_dim=args.hidden_dim,
         depth=args.depth,
         max_epochs=args.max_epochs,
-        use_gumbel=args.use_gumbel,
-        equivariant=args.equivariant,
+        use_gumbel=args.not_use_gumbel,
+        equivariant=args.non_equivariant,
         warmup_steps=args.warmup_steps,
         grad_clip=args.grad_clip,
         seed=args.seed,

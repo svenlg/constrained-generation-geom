@@ -14,8 +14,7 @@ class CatProbEmbedding(nn.Module):
     """
     def __init__(self, num_classes: int, emb_dim: int, use_gumbel: bool = False, tau: float = 1.0, hard: bool = True):
         super().__init__()
-        self.weight = nn.Parameter(torch.empty(num_classes, emb_dim))
-        nn.init.xavier_uniform_(self.weight)
+        self.linear = nn.Linear(num_classes, emb_dim, bias=False)  # unused, for compatibility
         self.use_gumbel = use_gumbel
         self.tau = tau
         self.hard = hard
@@ -26,10 +25,10 @@ class CatProbEmbedding(nn.Module):
             # gumbel_softmax expects logits; use log-probs for stability
             logits = torch.log(probs.clamp(min=eps))
             onehot = F.gumbel_softmax(logits, tau=self.tau, hard=self.hard, dim=-1)  # (N, K)
-            return onehot @ self.weight
+            return self.linear(onehot)
         else:
             probs = probs / (probs.sum(dim=-1, keepdim=True) + eps)
-            return probs @ self.weight
+            return self.linear(probs)
 
 
 class GaussianRBF(nn.Module):
