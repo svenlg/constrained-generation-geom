@@ -37,21 +37,34 @@ class AugmentedReward:
         cur_constraint_violations = torch.sum(self.tmp_constraint > self.bound).detach().cpu().item() / len(self.tmp_constraint)
         cur_constraint = self.tmp_constraint.clone().detach().mean().cpu().item()
         return cur_reward, cur_constraint, cur_constraint_violations
-
+    
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
         # We want to maximize reward and minimize constraint
         # Note lambda < 0, rho > 0
         self.tmp_reward = self.reward_fn(x)
-        reward = self.tmp_reward.mean()
         self.tmp_constraint = self.constraint_fn(x)
-        constraint = self.tmp_constraint.mean()
-        tmp_lambda = torch.ones_like(constraint, device=constraint.device) * self.lambda_
-        tmp_rho = torch.ones_like(constraint, device=constraint.device) * self.rho_
-        tmp_zero = torch.zeros_like(constraint, device=constraint.device)
+        tmp_lambda = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.lambda_
+        tmp_rho = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.rho_
+        tmp_zero = torch.zeros_like(self.tmp_constraint, device=self.tmp_constraint.device)
         self.tmp_total = (
-                reward - tmp_rho/2 * torch.max(tmp_zero, constraint - tmp_lambda/tmp_rho)**2 
+                self.tmp_reward - tmp_rho/2 * torch.max(tmp_zero, self.tmp_constraint - tmp_lambda/tmp_rho)**2
             ).mean()
         return self.alpha * self.tmp_total
+
+    # def __call__(self, x: torch.Tensor) -> torch.Tensor:
+    #     # We want to maximize reward and minimize constraint
+    #     # Note lambda < 0, rho > 0
+    #     self.tmp_reward = self.reward_fn(x)
+    #     reward = self.tmp_reward.mean()
+    #     self.tmp_constraint = self.constraint_fn(x)
+    #     constraint = self.tmp_constraint.mean()
+    #     tmp_lambda = torch.ones_like(constraint, device=constraint.device) * self.lambda_
+    #     tmp_rho = torch.ones_like(constraint, device=constraint.device) * self.rho_
+    #     tmp_zero = torch.zeros_like(constraint, device=constraint.device)
+    #     self.tmp_total = (
+    #             reward - tmp_rho/2 * torch.max(tmp_zero, constraint - tmp_lambda/tmp_rho)**2 
+    #         ).mean()
+    #     return self.alpha * self.tmp_total
 
     def grad_augmented_reward_fn(self, x: Union[torch.Tensor, dgl.DGLGraph]) -> torch.Tensor:
 
