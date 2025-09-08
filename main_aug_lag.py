@@ -228,7 +228,7 @@ def main():
     tmp_log = augmented_reward.get_statistics()
     full_stats.append(tmp_log)
 
-    al_lowest_const_violations = full_stats[-1]["constraint_violations"]
+    al_lowest_const = full_stats[-1]["constraint"]
     al_best_reward = full_stats[-1]["reward"]
 
     alm = AugmentedLagrangian(
@@ -332,8 +332,6 @@ def main():
                       f"Constraint: {am_stats[-1]['constraint']:.4f}, Violations: {am_stats[-1]['constraint_violations']:.4f}", flush=True)
                 print(f"\tBest reward: {am_best_total_reward:.4f} in step {am_best_iteration}", flush=True)
         
-
-
         full_stats.extend(am_stats)
 
         gen_model = copy.deepcopy(trainer.fine_model)
@@ -343,12 +341,12 @@ def main():
             print(f"Model saved to {save_path}", flush=True)
 
         # Print final statistics
-        if full_stats[-1]["constraint_violations"] < al_lowest_const_violations:
-            al_lowest_const_violations = full_stats[-1]["constraint_violations"]
+        if full_stats[-1]["constraint"] < al_lowest_const:
+            al_lowest_const = full_stats[-1]["constraint"]
             al_best_epoch = k
             al_best_reward = full_stats[-1]["reward"]
 
-        print(f"Best overall reward: {al_best_reward:.4f} with violations {al_lowest_const_violations:.4f} at epoch {al_best_epoch}", flush=True)
+        print(f"Best overall reward: {al_best_reward:.4f} with violations {al_lowest_const:.4f} at epoch {al_best_epoch}", flush=True)
 
         # Generate Samples and update the augmented lagrangian parameters
         tmp_model = copy.deepcopy(gen_model)
