@@ -442,9 +442,14 @@ class FlowMol(pl.LightningModule):
 
     def sample_random_sizes(self, n_molecules: int, device="cuda:0",
                             stochasticity=None, high_confidence_threshold=None, 
-                            xt_traj=False, ep_traj=False, sampler_type:str='euler',
-                            min_num_atoms:int=None, max_num_atoms:int=None,
-                            keep_intermediate_graphs:bool=False, **kwargs):
+                            xt_traj=False, ep_traj=False, 
+                            ######## CHANGED THIS ########
+                            sampler_type:str='euler',
+                            min_num_atoms:int=None, 
+                            max_num_atoms:int=None,
+                            keep_intermediate_graphs: bool = False,
+                            ##############################
+                            **kwargs):
         """Sample n_molecules with the number of atoms sampled from the distribution of the training set."""
 
         # get the number of atoms that will be in each molecules
@@ -452,11 +457,12 @@ class FlowMol(pl.LightningModule):
             atoms_per_molecule = self.sample_n_atoms(n_molecules).to(device)
         else:
             while True:
-                atoms_per_molecule = self.sample_n_atoms(n_molecules*10).to(device)
+                atoms_per_molecule = self.sample_n_atoms(n_molecules*5).to(device)
                 atoms_per_molecule = atoms_per_molecule[ (atoms_per_molecule >= min_num_atoms) & (atoms_per_molecule <= max_num_atoms) ]
                 if len(atoms_per_molecule) >= n_molecules:
                     atoms_per_molecule = atoms_per_molecule[:n_molecules]
                     break
+        
         return self.sample(atoms_per_molecule, 
             device=device,  
             stochasticity=stochasticity, 
@@ -476,8 +482,10 @@ class FlowMol(pl.LightningModule):
                high_confidence_threshold=None, 
                xt_traj=False, 
                ep_traj=False,
+               ######## CHANGED THIS ########
                sampler_type: str = 'euler',
                keep_intermediate_graphs:bool=False,
+               ##############################
                **kwargs):
         """Sample molecules with the given number of atoms.
         

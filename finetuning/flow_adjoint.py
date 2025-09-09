@@ -11,6 +11,9 @@ from torch.utils.data import Dataset, ConcatDataset
 from finetuning.flow_adjoint_solver import LeanAdjointSolverFlow, step
 
 
+MAX_ALLOWED_ATOMS = 75  # upper bound for molecule size (can be upto 182 for GEOM)
+MIN_ALLOWED_ATOMS = 30  # lower bound for molecule size (can be as low as 3 for GEOM)
+
 class AMDataset(Dataset):
     def __init__(self, solver_info):
         # NOTE: T is the number of steps after the cutoff time
@@ -147,18 +150,13 @@ def sampling(
     model: flowmol.FlowMol,
     device: torch.device,
 ):
-    MAX_ALLOWED_ATOMS = 75  # upper bound for molecule size (can be upto 182 for GEOM)
-    MIN_ALLOWED_ATOMS = 30  # lower bound for molecule size (can be as low as 3 for GEOM)
-   
+
     model.to(device)
 
     n_atoms_provided = config.n_atoms is not None
 
     # --- Mode 1: fixed-size sampling if n_atoms is specified ---
     if n_atoms_provided:
-        if not isinstance(config.n_atoms, int) or (config.n_atoms <= MIN_ALLOWED_ATOMS-1) or (config.n_atoms >= MAX_ALLOWED_ATOMS+1):
-            raise ValueError(f"n_atoms must be a positive int between {MIN_ALLOWED_ATOMS} and {MAX_ALLOWED_ATOMS}, got {config.n_atoms!r}")
-        
         _, graph_trajectories = model.sample(
             sampler_type = config.sampler_type,
             n_atoms=torch.tensor([config.n_atoms] * batch_size, device=device),
@@ -169,21 +167,6 @@ def sampling(
 
     # --- Mode 2: random-size sampling (optionally bounded) ---
     else:
-        # Fill missing bound with maximum allowed
-        if config.min_num_atoms is None:
-            config.min_num_atoms = MIN_ALLOWED_ATOMS
-        if config.max_num_atoms is None:
-            config.max_num_atoms = MAX_ALLOWED_ATOMS
-
-        # Type & value checks
-        if not (isinstance(config.min_num_atoms, int) and isinstance(config.max_num_atoms, int)):
-            raise ValueError("`min_num_atoms` and `max_num_atoms` must be ints.")
-        if (config.min_num_atoms >= config.max_num_atoms) or (config.min_num_atoms < MIN_ALLOWED_ATOMS) or (config.max_num_atoms > MAX_ALLOWED_ATOMS):
-            raise ValueError(
-                f"Invalid size bounds: min_num_atoms={config.min_num_atoms}, max_num_atoms={config.max_num_atoms}. "
-                f"Must satisfy: min_num_atoms < max_num_atoms, max_num_atoms >= {MIN_ALLOWED_ATOMS}, min_num_atoms <= {MAX_ALLOWED_ATOMS}."
-            )
-
         _, graph_trajectories = model.sample_random_sizes(
             sampler_type = config.sampler_type,
             n_molecules=batch_size,
@@ -210,7 +193,39 @@ class AdjointMatchingFinetuningTrainerFlowMol:
         self.sampling_config = config.sampling
         self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.verbose = verbose
+
+        # Nodes limit
         self.max_nodes = config.get("max_nodes", 210)
+        if self.sampling_config.n_atoms is not None:
+            if not isinstance(self.sampling_config.n_atoms, int):
+                raise ValueError(f"n_atoms must be a positive int, got {self.sampling_config.n_atoms}")
+            if self.sampling_config.n_atoms < MIN_ALLOWED_ATOMS or self.sampling_config.n_atoms > MAX_ALLOWED_ATOMS:
+                raise ValueError(f"n_atoms must be between {MIN_ALLOWED_ATOMS} and {MAX_ALLOWED_ATOMS}, got {self.sampling_config.n_atoms}")        
+            if self.sampling_config.n_atoms * self.config.batch_size > self.max_nodes:
+                raise ValueError(f"n_atoms * batch_size = {self.sampling_config.n_atoms * self.config.batch_size} > max_nodes ({self.max_nodes}). Please decrease n_atoms or increase max_nodes.")
+        else:
+            self.sampling_config.n_atoms = None
+
+        if self.sampling_config.min_num_atoms is not None:
+            if not isinstance(self.sampling_config.min_num_atoms, int):
+                raise ValueError(f"min_num_atoms must be a positive int, got {self.sampling_config.min_num_atoms}")
+            if self.sampling_config.min_num_atoms < MIN_ALLOWED_ATOMS or self.sampling_config.min_num_atoms > MAX_ALLOWED_ATOMS:
+                raise ValueError(f"min_num_atoms must be between {MIN_ALLOWED_ATOMS} and {MAX_ALLOWED_ATOMS}, got {self.sampling_config.min_num_atoms}")
+            if self.sampling_config.min_num_atoms * self.config.batch_size > self.max_nodes:
+                raise ValueError(f"min_num_atoms * batch_size = {self.sampling_config.min_num_atoms * self.config.batch_size} > max_nodes ({self.max_nodes}). Please decrease min_num_atoms or increase max_nodes.")
+        else:
+            self.sampling_config.min_num_atoms = MIN_ALLOWED_ATOMS
+            
+        if self.sampling_config.max_num_atoms is not None:
+            if not isinstance(self.sampling_config.max_num_atoms, int):
+                raise ValueError(f"max_num_atoms must be a positive int, got {self.sampling_config.max_num_atoms}")
+            if self.sampling_config.max_num_atoms < MIN_ALLOWED_ATOMS or self.sampling_config.max_num_atoms > MAX_ALLOWED_ATOMS:
+                raise ValueError(f"max_num_atoms must be between {MIN_ALLOWED_ATOMS} and {MAX_ALLOWED_ATOMS}, got {self.sampling_config.max_num_atoms}")
+        else:
+            self.sampling_config.max_num_atoms = MAX_ALLOWED_ATOMS
+        
+        if self.sampling_config.max_num_atoms < self.sampling_config.min_num_atoms:
+            raise ValueError(f"max_num_atoms must be >= min_num_atoms, got min_num_atoms={self.sampling_config.min_num_atoms}, max_num_atoms={self.sampling_config.max_num_atoms}")
 
         # Clip
         self.clip_grad_norm = config.get("clip_grad_norm", 1e5)
@@ -245,17 +260,6 @@ class AdjointMatchingFinetuningTrainerFlowMol:
 
     def sample_trajectories(self):
         self.fine_model.eval()
-
-        if self.sampling_config.n_atoms is not None:
-            if not isinstance(self.sampling_config.n_atoms, int):
-                raise ValueError(f"n_atoms must be a positive int, got {self.sampling_config.n_atoms!r}")
-            if self.sampling_config.n_atoms * self.config.batch_size > self.max_nodes:
-                raise ValueError(f"n_atoms * batch_size = {self.sampling_config.n_atoms * self.config.batch_size} > max_nodes ({self.max_nodes}). Please decrease n_atoms or increase max_nodes.")
-            
-        if (self.sampling_config.min_num_atoms is not None) or (self.sampling_config.max_num_atoms is not None):
-            if (self.sampling_config.min_num_atoms is not None) and isinstance(self.sampling_config.min_num_atoms, int):
-                if self.sampling_config.min_num_atoms * self.config.batch_size > self.max_nodes:
-                    raise ValueError(f"min_num_atoms * batch_size = {self.sampling_config.min_num_atoms * self.config.batch_size} > max_nodes ({self.max_nodes}). Please decrease min_num_atoms or increase max_nodes.")
             
         graph_trajectories = sampling(
             config = self.sampling_config,
@@ -263,6 +267,7 @@ class AdjointMatchingFinetuningTrainerFlowMol:
             model = self.fine_model,
             device = self.device,
         )
+
         ts = torch.linspace(0.0, 1.0, self.sampling_config.num_integration_steps + 1).to(self.device)
         sigmas = self.fine_model.vector_field.sigmas
         sigmas = torch.stack(sigmas, dim=0).to(self.device)
