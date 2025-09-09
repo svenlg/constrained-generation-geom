@@ -313,6 +313,11 @@ def main():
                     max_num_atoms=max_num_atoms,
                 )
                 del tmp_model
+                if args.save_samples:
+                    tmp_save_path = str(sample_path / Path(f"samples_{total_steps_made}.bin"))
+                    tmp_samples = [graph for graph in dgl.unbatch(dgl_mols.cpu())]
+                    save_graphs(tmp_save_path, tmp_samples)
+                    del tmp_samples
 
                 # Compute reward for current samples
                 _ = augmented_reward(dgl_mols)
@@ -365,11 +370,6 @@ def main():
             max_num_atoms=max_num_atoms
         )
         del tmp_model
-        if args.save_samples:
-            tmp_save_path = str(sample_path / Path(f"samples_{k}.bin"))
-            tmp_samples = [graph for graph in dgl.unbatch(dgl_mols.cpu())]
-            save_graphs(tmp_save_path, tmp_samples)
-            del tmp_samples
 
         alm.update_lambda_rho(dgl_mols)
         del dgl_mols, rd_mols, trainer
