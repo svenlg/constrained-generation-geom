@@ -9,10 +9,10 @@ import dgl
 import torch
 from datetime import datetime
 
-from posebusters import PoseBusters
+# from true_rc.posebuster_scorer import posebusters_score
+# from true_rc.xtb_calc import compute_xtb
 
-from reg_data_generation.posebuster_scorer import posebusters_score
-from reg_data_generation.xtb_calc import compute_xtb
+from true_rc import get_rc_properties
 
 from utils.utils import set_seed
 import flowmol
@@ -21,7 +21,6 @@ import logging
 from rdkit import RDLogger
 RDLogger.DisableLog('rdApp.*')
 logging.getLogger("rdkit").setLevel(logging.CRITICAL)
-
 
 REMOVE_NODE_KEYS = ['x_0', 'a_0', 'c_0', 'x_1_pred', 'a_1_pred', 'c_1_pred', 'x_1', 'a_1', 'c_1']
 REMOVE_EDGE_KEYS = ['e_0', 'e_1_pred', 'e_1']
@@ -102,25 +101,7 @@ def main(args):
             )
             print(f"Sampling time: {time.time() - tmp_time:.2f} seconds", flush=True)
 
-            ######
-            # Get PoseBusters Feedback
-            tmp_time = time.time()
-            df_scores = posebusters_score(rd_mols)
-            print(f"PoseBusters time: {time.time() - tmp_time:.2f} seconds", flush=True)
-
-            ######
-            # XTB-Calulations
-            tmp_time = time.time()
-            properties = []
-            for tmp_mol in rd_mols:
-                rtn_dict = compute_xtb(tmp_mol, "rdkit")
-                properties.append(rtn_dict)
-            print(f"XTB time: {time.time() - tmp_time:.2f} seconds", flush=True)
-
-            df_props = pd.DataFrame.from_records(properties)
-            df = pd.concat([df_scores, df_props], axis=1)
-
-            records = df.to_dict(orient="records")
+            records = get_rc_properties(rd_mols, verbose=True, return_dict=True)
             data_rows.extend(records)
 
             for k, g in enumerate(clean_mols):

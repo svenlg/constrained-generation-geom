@@ -5,6 +5,11 @@ import tempfile
 import subprocess
 from rdkit.Chem import GetPeriodicTable
 
+import logging
+from rdkit import RDLogger
+RDLogger.DisableLog('rdApp.*')
+logging.getLogger("rdkit").setLevel(logging.CRITICAL)
+
 def extract_dipole(output: str) -> float:
     """
     Extract the total dipole moment (Debye) from xTB output.

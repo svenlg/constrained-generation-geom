@@ -13,9 +13,9 @@ from pathlib import Path
 from datetime import datetime
 from omegaconf import OmegaConf
 
-from utils.setup import parse_args, update_config_with_args
-from utils.utils import extract_trailing_numbers, set_seed
-from utils.sampling import sampling
+from utils import parse_args, update_config_with_args, extract_trailing_numbers, set_seed, sampling
+
+from true_rc import pred_vs_real
 
 import dgl
 import flowmol
@@ -134,7 +134,7 @@ def main():
     if args.debug:
         config.augmented_lagrangian.sampling.num_samples = config.augmented_lagrangian.sampling.num_samples if torch.cuda.is_available() else 8
         config.adjoint_matching.sampling.num_samples = 20 if torch.cuda.is_available() else 4
-        config.adjoint_matching.batch_size = 5
+        config.adjoint_matching.batch_size = 5 if torch.cuda.is_available() else 2
         config.reward_sampling.num_samples = config.reward_sampling.num_samples if torch.cuda.is_available() else 8
         finetune_steps = config.adjoint_matching.sampling.num_samples // config.adjoint_matching.batch_size
         plotting_freq = 1
@@ -205,7 +205,6 @@ def main():
     al_stats = []
     full_stats = []
     al_best_reward = -1e8
-    al_lowest_const_violations = 1.0
     al_best_epoch = 0
     if args.save_samples:
         from dgl import save_graphs
@@ -233,6 +232,9 @@ def main():
     _ = augmented_reward(dgl_mols)
     tmp_log = augmented_reward.get_statistics()
     full_stats.append(tmp_log)
+    # Compare with true value
+    pred_rc = augmented_reward.get_full_statistics()
+    log_pred_vs_real = pred_vs_real(rd_mols, pred_rc, reward=config.reward.fn, constraint=config.constraint.fn)
 
     al_lowest_const = full_stats[-1]["constraint"]
     al_best_reward = full_stats[-1]["reward"]
@@ -250,6 +252,7 @@ def main():
     if use_wandb:
         logs = {}
         logs.update(tmp_log)
+        logs.update(log_pred_vs_real)
         logs.update({"total_best_reward": al_best_reward})
         log = alm.get_statistics()
         logs.update(log) # lambda, rho, expected_constraint
@@ -322,6 +325,9 @@ def main():
                 # Compute reward for current samples
                 _ = augmented_reward(dgl_mols)
                 del dgl_mols
+                pred_rc = augmented_reward.get_full_statistics()
+                log_pred_vs_real = pred_vs_real(rd_mols, pred_rc, reward=config.reward.fn, constraint=config.constraint.fn)
+                del rd_mols
                 tmp_log = augmented_reward.get_statistics()
                 tmp_log["loss"] = loss/reward_lambda/(traj_len//2)
                 am_stats.append(tmp_log)
@@ -333,6 +339,7 @@ def main():
                 if use_wandb:
                     logs = {}
                     logs.update(tmp_log)
+                    logs.update(log_pred_vs_real)
                     logs.update({"loss": tmp_log["loss"],
                                  "total_best_reward": am_best_total_reward})
                     log = alm.get_statistics()

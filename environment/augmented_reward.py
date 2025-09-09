@@ -117,3 +117,10 @@ class AugmentedReward:
             f"constraint_violations": constraint_violations,
         }
     
+    def get_full_statistics(self) -> dict:
+        reward = self.tmp_reward.clone().detach().cpu().numpy()
+        constraint = self.tmp_constraint.clone().detach().cpu().numpy()
+        return {
+            f"reward": reward,
+            f"constraint": constraint,
+        }
