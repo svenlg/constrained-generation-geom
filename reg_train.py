@@ -317,16 +317,16 @@ def train(
 # ---------------------------
 def parse_args():
     p = argparse.ArgumentParser("Train GNN (plain PyTorch + DGL)")
-    p.add_argument("-e", "--experiment", type=str, required=True, help="Path to data folder (same as before)")
-    p.add_argument("-m", "--model_type", type=str, default="gnn", help="One of: egnn, gnn")
-    p.add_argument("--property", type=str, default="dipole",
+    p.add_argument("--property", type=str, required=True,
                    help="One of: score, energy, homo, lumo, homolumo_gap, dipole, dipole_zero")
+    p.add_argument("-e", "--experiment", type=str, required=True, help="Path to data folder (same as before)")
+    p.add_argument("-m", "--model_type", type=str, required=True, help="One of: egnn, gnn")
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("-bs", "--batch_size", type=int, default=64)
     p.add_argument("-lr", "--learning_rate", type=float, default=1e-3)
     p.add_argument("-wd", "--weight_decay", type=float, default=1e-5)
-    p.add_argument("-hd", "--hidden_dim", type=int, default=256)
-    p.add_argument("-d", "--depth", type=int, default=8)
+    p.add_argument("-hd", "--hidden_dim", type=int, default=96)
+    p.add_argument("-d", "--depth", type=int, default=4)
     p.add_argument("-me", "--max_epochs", type=int, default=100)
     p.add_argument("--not_use_gumbel", action="store_false")
     p.add_argument("--non_equivariant", action="store_false")

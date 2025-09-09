@@ -210,7 +210,7 @@ class AdjointMatchingFinetuningTrainerFlowMol:
         self.sampling_config = config.sampling
         self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.verbose = verbose
-        self.max_nodes = config.get("max_nodes", 210)
+        self.max_nodes = config.get("max_nodes", 225)
 
         # Clip
         self.clip_grad_norm = config.get("clip_grad_norm", 1e5)
