@@ -24,7 +24,7 @@ from environment import AugmentedReward
 
 from finetuning import AugmentedLagrangian, AdjointMatchingFinetuningTrainerFlowMol
 
-from regessor import GNN
+from regessor import GNN, MoleculeGNN
 
 # Load - Flow Model
 def setup_gen_model(flow_model: str, device: torch.device): 
@@ -33,31 +33,37 @@ def setup_gen_model(flow_model: str, device: torch.device):
     return gen_model
 
 # Setup Reward and constraint models
-def load_regressor(property: str, date: str, device: torch.device) -> nn.Module:
-    model_path = osp.join("pretrained_models", property, date, "best_model.pt")
+def load_regressor(config: OmegaConf, device: torch.device) -> nn.Module:
+    K_x = 3  # number of spatial dimensions (3D)
+    K_a = 10 # number of atom features
+    K_c = 6  # number of charge classes (0, +1, -1, +2)
+    K_e = 5  # number of bond types (none, single, double, triple, aromatic)
+    model_path = osp.join("pretrained_models", config.fn, config.model_type, config.date, "best_model.pt")
     state = torch.load(model_path, map_location=device)
-    model = GNN(property=property, 
-                node_feats=state["config"]["node_feats"],
-                edge_feats=state["config"]["edge_feats"],
-                hidden_dim=state["config"]["hidden_dim"],
-                depth=state["config"]["depth"],
-            )
-    model.load_state_dict(state["model_state"])
-    return model
+    if config.model_type == "gnn":
+        model_config = {
+            "property": state["config"]["property"],
+            "node_feats": K_a + K_c + K_x,
+            "edge_feats": K_e,
+            "hidden_dim": state["config"]["hidden_dim"],
+            "depth": state["config"]["depth"],
+        }
+        model = GNN(**model_config)
+    elif config.model_type == "egnn":
+        model_config = {
+            "property": state["config"]["property"],
+            "num_atom_types": K_a,
+            "num_charge_classes": K_c,
+            "num_bond_types": K_e,
+            "hidden_dim": state["config"]["hidden_dim"],
+            "depth": state["config"]["depth"],
+            "use_gumbel": state["config"]["use_gumbel"],
+            "equivariant": state["config"]["equivariant"],
+        }
+        model = MoleculeGNN(**model_config)
 
-# # Sampling
-# def sampling(config: OmegaConf, model: flowmol.FlowMol, device: torch.device,
-#              min_num_atoms: int = None, max_num_atoms: int = None,
-#              n_atoms: int = None):
-#     model.to(device)
-#     new_molecules, _ = model.sample_random_sizes(
-#         sampler_type = config.sampler_type,
-#         n_molecules = config.num_samples, 
-#         n_timesteps = config.num_integration_steps + 1, 
-#         device = device,
-#         keep_intermediate_graphs = True,
-#     )
-#     return new_molecules
+    model.load_state_dict(state["model_state"])
+    return model, model_config
 
 def main():
     # Parse command line arguments
@@ -127,8 +133,8 @@ def main():
 
     if args.debug:
         config.augmented_lagrangian.sampling.num_samples = config.augmented_lagrangian.sampling.num_samples if torch.cuda.is_available() else 8
-        config.adjoint_matching.sampling.num_samples = 16 if torch.cuda.is_available() else 4
-        config.adjoint_matching.batch_size = 4
+        config.adjoint_matching.sampling.num_samples = 20 if torch.cuda.is_available() else 4
+        config.adjoint_matching.batch_size = 5
         config.reward_sampling.num_samples = config.reward_sampling.num_samples if torch.cuda.is_available() else 8
         finetune_steps = config.adjoint_matching.sampling.num_samples // config.adjoint_matching.batch_size
         plotting_freq = 1
@@ -177,8 +183,8 @@ def main():
     gen_model = copy.deepcopy(base_model)
 
     # Setup - Reward and Constraint Functions
-    reward_model = load_regressor(config.reward.fn, config.reward.date, device=device)
-    constraint_model = load_regressor(config.constraint.fn, config.constraint.date, device=device)
+    reward_model, reward_model_config = load_regressor(config.reward, device=device)
+    constraint_model, constraint_model_config = load_regressor(config.constraint, device=device)
 
     # Setup - Environment, AugmentedReward, ConstraintModel
     augmented_reward = AugmentedReward(
