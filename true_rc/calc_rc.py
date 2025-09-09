@@ -21,7 +21,7 @@ def get_rc_properties(rd_mols: List, verbose: bool = False, return_dict: bool = 
     tmp_time = time.time()
     properties = []
     for tmp_mol in rd_mols:
-        rtn_dict = compute_xtb(tmp_mol, "rdkit")
+        rtn_dict = compute_xtb(tmp_mol, "rdkit", verbose)
         properties.append(rtn_dict)
     if verbose:
         print(f"XTB time: {time.time() - tmp_time:.2f} seconds", flush=True)

@@ -10,7 +10,7 @@ from rdkit import RDLogger
 RDLogger.DisableLog('rdApp.*')
 logging.getLogger("rdkit").setLevel(logging.CRITICAL)
 
-def extract_dipole(output: str) -> float:
+def extract_dipole(output: str, verbose: bool = True) -> float:
     """
     Extract the total dipole moment (Debye) from xTB output.
     Looks for the 'full:' line under 'molecular dipole'.
@@ -26,14 +26,14 @@ def extract_dipole(output: str) -> float:
     
     match = pattern.search(output)
     if not match:
-        print("Dipole not found in xTB output", flush=True)
+        if verbose:
+            print("Dipole not found in xTB output", flush=True)
         return 0
-        raise ValueError("Dipole not found in xTB output")
     
     # The last group is the total dipole in Debye
     return float(match.group(4))
 
-def extract_homo_lumo(output: str) -> tuple:
+def extract_homo_lumo(output: str, verbose: bool = True) -> tuple:
     """
     Extract the HOMO-LUMO gap, LUMO, and HOMO energies from xTB output.
     """
@@ -41,22 +41,34 @@ def extract_homo_lumo(output: str) -> tuple:
     lumo = None
     for line in output.split("\n"):
         if "HOMO" in line:
-            homo = float(line.split()[-2])
+            try:
+                homo = float(line.split()[-2])
+            except ValueError:
+                return (None, None, None)
         elif "LUMO" in line:
-            lumo = float(line.split()[-2])
+            try:
+                lumo = float(line.split()[-2])
+            except ValueError:
+                return (None, None, None)
         if (homo is not None) and (lumo is not None):
             return lumo - homo, lumo, homo
-    if homo is None:
-        print("HOMO not found in xTB output", flush=True)
-    if lumo is None:
-        print("LUMO not found in xTB output", flush=True)
+    if verbose: 
+        if homo is None:
+            print("HOMO not found in xTB output", flush=True)
+        if lumo is None:
+            print("LUMO not found in xTB output", flush=True)
     return (None, None, None)
 
-def extract_energy(output: str) -> float:
+def extract_energy(output: str, verbose: bool = True) -> float:
     for line in output.split("\n"):
         if "total energy" in line:
-            return float(line.split()[-3])
-    print("Total energy not found in xTB output", flush=True)
+            try:
+                energy = float(line.split()[-3])
+            except ValueError:
+                energy = None
+            return energy
+    if verbose:
+        print("Total energy not found in xTB output", flush=True)
     return None
 
 def atomic_symbol(z: int) -> str:
@@ -114,7 +126,7 @@ def run_xtb(xyz_file):
 
     return rtn_dict
 
-def compute_xtb(molecule, format_type):
+def compute_xtb(molecule, format_type, verbose:bool = True):
     """
     Compute HOMO-LUMO gap, dipole, and energy for a molecule using xTB.
     Uses a unique temporary directory based on SLURM job ID (if available),
@@ -145,12 +157,12 @@ def compute_xtb(molecule, format_type):
         output = result.stdout
 
         rtn_dict = {}
-        gap, lumo, homo = extract_homo_lumo(output)
+        gap, lumo, homo = extract_homo_lumo(output, verbose)
         rtn_dict["homolumo_gap"] = gap
         rtn_dict["lumo"] = lumo
         rtn_dict["homo"] = homo
-        rtn_dict["dipole"] = extract_dipole(output)
-        rtn_dict["energy"] = extract_energy(output)
+        rtn_dict["dipole"] = extract_dipole(output, verbose)
+        rtn_dict["energy"] = extract_energy(output, verbose)
 
         # TemporaryDirectory cleans up automatically
         return rtn_dict
