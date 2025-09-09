@@ -187,13 +187,13 @@ def train(
         if wandb_project is None:
             wandb_project = f"gnn-molecular-{property}"
         if wandb_name is None:
-            wandb_name = f"{run_id}_{model_type}bs{batch_size}_lr{learning_rate}_hd{hidden_dim}_d{depth}"
+            wandb_name = f"{run_id}_bs{batch_size}_lr{learning_rate}_hd{hidden_dim}_d{depth}"
         wandb.init(project=wandb_project, name=wandb_name, config=config)
         sweep_id = wandb.run.sweep_id if wandb.run.sweep_id else None
         if sweep_id is not None:
             print(f"WandB sweep ID: {sweep_id}")
-            run_id = wandb.run.id
-            ckpt_dir = f"pretrained_models/{property}/{model_type}/{sweep_id}/{run_id}/"
+            tmp_name = wandb_name if wandb_name is not None else wandb.run.id
+            ckpt_dir = f"pretrained_models/{property}/{model_type}/{sweep_id}/{tmp_name}/"
 
     # ---------------------------
     # Main loop

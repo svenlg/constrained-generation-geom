@@ -24,7 +24,7 @@ from environment import AugmentedReward
 
 from finetuning import AugmentedLagrangian, AdjointMatchingFinetuningTrainerFlowMol
 
-from regessor import GNN
+from regessor import GNN, MoleculeGNN
 
 # Load - Flow Model
 def setup_gen_model(flow_model: str, device: torch.device): 
@@ -33,15 +33,20 @@ def setup_gen_model(flow_model: str, device: torch.device):
     return gen_model
 
 # Setup Reward and constraint models
-def load_regressor(property: str, date: str, device: torch.device) -> nn.Module:
-    model_path = osp.join("pretrained_models", property, date, "best_model.pt")
+def load_regressor(property: str, model_type: str, date: str, device: torch.device) -> nn.Module:
+    model_path = osp.join("pretrained_models", property, model_type, date, "best_model.pt")
     state = torch.load(model_path, map_location=device)
-    model = GNN(property=property, 
-                node_feats=state["config"]["node_feats"],
-                edge_feats=state["config"]["edge_feats"],
-                hidden_dim=state["config"]["hidden_dim"],
-                depth=state["config"]["depth"],
-            )
+    if model_type == "gnn":
+        model = GNN(**state["config"])
+        # model = GNN(property=property, 
+        #             node_feats=state["config"]["node_feats"],
+        #             edge_feats=state["config"]["edge_feats"],
+        #             hidden_dim=state["config"]["hidden_dim"],
+        #             depth=state["config"]["depth"],
+        #         )
+    elif model_type == "egnn":
+        model = MoleculeGNN(**state["config"])
+
     model.load_state_dict(state["model_state"])
     return model
 
