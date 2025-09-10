@@ -95,8 +95,6 @@ def main():
     if use_wandb and sweep_id is not None:
         save_path = save_path / Path(f"{wandb.run.id}")
     if (args.save_samples or args.save_model or args.save_plots) and not args.debug:
-        if args.output_end is not None:
-            save_path = save_path / Path(f"{args.output_end}")
         save_path = save_path / Path(tmp_time)
         save_path.mkdir(parents=True, exist_ok=True)
         print(f"Run will be saved at:")

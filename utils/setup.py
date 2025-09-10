@@ -5,10 +5,6 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run ALM with optional parameter overrides")
     # Settings
     parser.add_argument("--debug", action='store_true')
-    parser.add_argument("--experiment", type=str,
-                        help="Name of the experiment")
-    parser.add_argument("--output_end", type=str,
-                        help="Path to output directory")
     parser.add_argument("--use_wandb", action='store_true',
                         help="Use wandb, default: false")
     parser.add_argument("--save_model", action='store_true',
@@ -21,13 +17,8 @@ def parse_args():
     flowmol_choices = ['qm9_ctmc', 'qm9_gaussian', 'geom_ctmc', 'geom_gaussian']
     parser.add_argument('--flow_model', type=str, choices=flowmol_choices,
                         help='pretrained model to be used')
-    # PAMNet arguments
-    parser.add_argument('--dataset', type=str, default='QM9', help='Dataset to be used')
-    parser.add_argument('--pamnet', type=str, default='PAMNet_s', choices=['PAMNet', 'PAMNet_s'], help='Model to be used')
-    parser.add_argument('--date', type=str, default='06-16',
-                        help='Date of the model to be used')
     # Reward and Constraint
-    reward_choices = ['energy', 'dipole', 'sascore']
+    reward_choices = ['dipole', 'score', 'dipole_zero']
     parser.add_argument("--reward", type=str, choices=reward_choices,
                         help="Override reward in config")
     parser.add_argument("--constraint", type=str, choices=reward_choices,
@@ -79,21 +70,9 @@ def parse_args():
 
 
 def update_config_with_args(config, args):
-    # Settings
-    if args.experiment is not None:
-        config.experiment = args.experiment
     # FlowMol arguments
     if args.flow_model is not None:
         config.flow_model = args.flow_model
-    # PAMNet arguments
-    if 'pamnet' not in config:
-        config.pamnet = OmegaConf.create()
-    if args.dataset is not None:
-        config.pamnet.dataset = args.dataset
-    if args.pamnet is not None:
-        config.pamnet.type = args.pamnet
-    if args.date is not None:
-        config.pamnet.date = args.date
     # Reward and Constraint
     if args.reward is not None:
         config.reward.fn = args.reward
@@ -102,10 +81,6 @@ def update_config_with_args(config, args):
     if args.bound is not None:
         config.constraint.bound = args.bound
     # Augmented Lagrangian Parameters
-    # if args.functional_type is not None:
-    #     config.augmented_lagrangian.functional_type = args.functional_type
-    if 'augmented_lagrangian' not in config:
-        config.augmented_lagrangian = OmegaConf.create()
     if args.rho_init is not None:
         config.augmented_lagrangian.rho_init = args.rho_init
     if args.rho_max is not None:
