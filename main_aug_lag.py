@@ -63,7 +63,7 @@ def load_regressor(config: OmegaConf, device: torch.device) -> nn.Module:
         model = MoleculeGNN(**model_config)
 
     model.load_state_dict(state["model_state"])
-    return model, model_config
+    return model, OmegaConf.create(model_config)
 
 def main():
     # Parse command line arguments
@@ -380,6 +380,8 @@ def main():
     
     if not args.debug:
         OmegaConf.save(config, save_path / Path("config.yaml"))
+        OmegaConf.save(reward_model_config, save_path / Path("reward_model_config.yaml"))
+        OmegaConf.save(constraint_model_config, save_path / Path("constraint_model_config.yaml"))
         full_stats[0]['loss'] = full_stats[1]['loss']
         df_al = pd.DataFrame.from_records(full_stats)
         df_al.to_csv(save_path / "full_stats.csv", index=False)
