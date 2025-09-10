@@ -82,23 +82,18 @@ def main():
 
     # Setup - WandB
     use_wandb = args.use_wandb and not args.debug
+    run_id = datetime.now().strftime("%m%d_%H%M")
+    run_name = f"{run_id}_r{config.reward.model_type}_c{config.constraint.model_type}{config.constraint.bound}_rf{config.reward_lambda}_lu{config.augmented_lagrangian.lagrangian_updates}"
     if use_wandb:
-        if "sweep" in config.experiment:
-            wandb.init()
-            run_name = wandb.run.name  # e.g., "olive-sweep-229"
-            run_number = extract_trailing_numbers(run_name)  # e.g., 229
-            run_id = wandb.run.id   # e.g., "ame6uc42"
-            print(f"Run #{run_number} - ID: {run_id}", flush=True)
-        else:
-            wandb.init(
-                name=config.experiment, 
-                config=dict(config),
-            )
+        wandb.init(name=run_name, config=config)
+        sweep_id = wandb.run.sweep_id if wandb.run.sweep_id else None
+        if sweep_id is not None:
+            print(f"WandB sweep ID: {sweep_id} - Run ID: {wandb.run.id}", flush=True)
 
     tmp_time = datetime.now().strftime("%m-%d-%H")
-    save_path = Path(config.root) / Path("aa_experiments") / Path(config.experiment)
-    if use_wandb and ("sweep" in config.experiment):
-        save_path = save_path / Path(f"{run_id}")
+    save_path = Path(config.root) / Path("aa_experiments") / Path(run_name)
+    if use_wandb and sweep_id is not None:
+        save_path = save_path / Path(f"{wandb.run.id}")
     if (args.save_samples or args.save_model or args.save_plots) and not args.debug:
         if args.output_end is not None:
             save_path = save_path / Path(f"{args.output_end}")
@@ -134,7 +129,7 @@ def main():
     if args.debug:
         config.augmented_lagrangian.sampling.num_samples = config.augmented_lagrangian.sampling.num_samples if torch.cuda.is_available() else 8
         config.adjoint_matching.sampling.num_samples = 20 if torch.cuda.is_available() else 4
-        config.adjoint_matching.batch_size = 5 if torch.cuda.is_available() else 2
+        config.adjoint_matching.batch_size = 5 
         config.reward_sampling.num_samples = config.reward_sampling.num_samples if torch.cuda.is_available() else 8
         finetune_steps = config.adjoint_matching.sampling.num_samples // config.adjoint_matching.batch_size
         plotting_freq = 1
@@ -144,7 +139,7 @@ def main():
         print("Debug mode activated", flush=True)
 
     print(f"--- Start ---", flush=True)
-    print(f"Finetuning {config.flow_model} in experiment {config.experiment}", flush=True)
+    print(f"Finetuning {config.flow_model}", flush=True)
     print(f"Reward: {config.reward.fn} - Constraint: {config.constraint.fn}", flush=True)
     print(f"Maximum Bound: {config.constraint.bound}", flush=True)
     start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
