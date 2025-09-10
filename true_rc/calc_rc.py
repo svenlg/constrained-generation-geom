@@ -54,6 +54,10 @@ def pred_vs_real(rd_mols: List, pred_dict: dict, reward: str, constraint: str) -
         "constraint/mse": mse(true_constraint, pred_constraint),
         "constraint/mae": mae(true_constraint, pred_constraint),
         "constraint/r2": r2(true_constraint, pred_constraint),
+        "true/reward": true_reward.mean(),
+        "true/reaward_std": true_reward.std(),
+        "true/constraint": true_constraint.mean(),
+        "true/constraint_std": true_constraint.std(),
     }
 
     return return_dict
