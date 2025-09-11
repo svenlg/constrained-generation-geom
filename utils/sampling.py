@@ -27,7 +27,7 @@ def sampling(
     2) Random-size sampling (default):
        -> uses `model.sample_random_sizes(...)`.
        -> If either `min_num_atoms` or `max_num_atoms` is provided, both must be
-          provided and pass validity checks, then they’re forwarded as bounds.
+          provided and pass validity checks, then they're forwarded as bounds.
 
     Validity checks when min/max are set:
       - min_num_atoms < max_num_atoms

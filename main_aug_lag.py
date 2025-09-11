@@ -13,7 +13,7 @@ from pathlib import Path
 from datetime import datetime
 from omegaconf import OmegaConf
 
-from utils import parse_args, update_config_with_args, extract_trailing_numbers, set_seed, sampling
+from utils import parse_args, update_config_with_args, set_seed, sampling
 
 from true_rc import pred_vs_real
 
@@ -83,19 +83,22 @@ def main():
     # Setup - WandB
     use_wandb = args.use_wandb and not args.debug
     run_id = datetime.now().strftime("%m%d_%H%M")
-    run_name = f"{run_id}_r{config.reward.model_type}_c{config.constraint.model_type}{config.constraint.bound}_rf{config.reward_lambda}_lu{config.augmented_lagrangian.lagrangian_updates}"
+    if config.experiment is not None:
+        run_name = f"{run_id}_{config.experiment}"
+    else:
+        run_name = f"{run_id}_r{config.reward.model_type}_c{config.constraint.model_type}{config.constraint.bound}_rf{config.reward_lambda}_lu{config.augmented_lagrangian.lagrangian_updates}"
+    print(f"Running: {run_name}")
     if use_wandb:
-        wandb.init(name=run_name, config=config)
+        wandb.init(name=run_name, config=OmegaConf.to_container(config, resolve=True))
         sweep_id = wandb.run.sweep_id if wandb.run.sweep_id else None
         if sweep_id is not None:
             print(f"WandB sweep ID: {sweep_id} - Run ID: {wandb.run.id}", flush=True)
 
-    tmp_time = datetime.now().strftime("%m-%d-%H")
-    save_path = Path(config.root) / Path("aa_experiments") / Path(run_name)
+    save_path = Path(config.root) / Path("aa_experiments")
     if use_wandb and sweep_id is not None:
-        save_path = save_path / Path(f"{wandb.run.id}")
+        save_path = save_path / Path(f"{sweep_id}") /Path(f"{wandb.run.id}")
     if (args.save_samples or args.save_model or args.save_plots) and not args.debug:
-        save_path = save_path / Path(tmp_time)
+        save_path = save_path / Path(run_name)
         save_path.mkdir(parents=True, exist_ok=True)
         print(f"Run will be saved at:")
         print(save_path)
@@ -379,9 +382,12 @@ def main():
         wandb.finish()
     
     if not args.debug:
-        OmegaConf.save(config, save_path / Path("config.yaml"))
-        OmegaConf.save(reward_model_config, save_path / Path("reward_model_config.yaml"))
-        OmegaConf.save(constraint_model_config, save_path / Path("constraint_model_config.yaml"))
+        # Save configs is config path
+        config_save_path = save_path / Path("configs")
+        config_save_path.mkdir(parents=True, exist_ok=True)
+        OmegaConf.save(config, config_save_path / Path("config.yaml"))
+        OmegaConf.save(reward_model_config, config_save_path / Path("reward_model_config.yaml"))
+        OmegaConf.save(constraint_model_config, config_save_path / Path("constraint_model_config.yaml"))
         full_stats[0]['loss'] = full_stats[1]['loss']
         df_al = pd.DataFrame.from_records(full_stats)
         df_al.to_csv(save_path / "full_stats.csv", index=False)
