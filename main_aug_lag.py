@@ -365,9 +365,9 @@ def main():
                     logs.update({"loss": tmp_log["loss"],
                                  "total_best_reward": am_best_total_reward})
                     log = alm.get_statistics()
-                    if config.rc_finetune.reward:
+                    if config.rc_finetune is not None and config.rc_finetune.reward:
                         logs.update(r_history)
-                    if config.rc_finetune.constraint:
+                    if config.rc_finetune is not None and config.rc_finetune.constraint:
                         logs.update(c_history)
                     logs.update(log)
                     wandb.log(logs)
@@ -381,7 +381,7 @@ def main():
         full_stats.extend(am_stats)
 
         gen_model = copy.deepcopy(trainer.fine_model)
-        if args.save_model and (k % 5 == 0) and k != lagrangian_updates:
+        if False and args.save_model and (k % 5 == 0) and k != lagrangian_updates:
             save_path.mkdir(parents=True, exist_ok=True)
             torch.save(gen_model.cpu().state_dict(), save_path / Path(f"model_{k}.pth"))
             print(f"Model saved to {save_path}", flush=True)
