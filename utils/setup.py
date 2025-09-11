@@ -5,6 +5,10 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Run ALM with optional parameter overrides")
     # Settings
     parser.add_argument("--debug", action='store_true')
+    parser.add_argument("--seed", type=int,
+                        help="Random seed.")
+    parser.add_argument("--experiment", type=str,
+                        help="Set experiment name.")
     parser.add_argument("--use_wandb", action='store_true',
                         help="Use wandb, default: false")
     parser.add_argument("--save_model", action='store_true',
@@ -70,6 +74,11 @@ def parse_args():
 
 
 def update_config_with_args(config, args):
+    # Settings
+    if args.seed is not None:
+        config.seed = args.seed
+    if args.experiment is not None:
+        config.experiment = args.experiment
     # FlowMol arguments
     if args.flow_model is not None:
         config.flow_model = args.flow_model
