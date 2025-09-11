@@ -125,7 +125,7 @@ def main():
     config.rc_finetune = config.get("rc_finetune", None)
 
     num_iterations = config.total_iterations // lagrangian_updates
-    plotting_freq = num_iterations // 5
+    plotting_freq = 10
 
     baseline = args.baseline
     if baseline:
@@ -134,7 +134,7 @@ def main():
     if args.debug:
         config.augmented_lagrangian.sampling.num_samples = config.augmented_lagrangian.sampling.num_samples if torch.cuda.is_available() else 8
         config.adjoint_matching.sampling.num_samples = 20 if torch.cuda.is_available() else 4
-        config.adjoint_matching.batch_size = 5 
+        config.adjoint_matching.batch_size = 5 if torch.cuda.is_available() else 2
         config.reward_sampling.num_samples = config.reward_sampling.num_samples if torch.cuda.is_available() else 8
         finetune_steps = config.adjoint_matching.sampling.num_samples // config.adjoint_matching.batch_size
         plotting_freq = 1
@@ -306,9 +306,8 @@ def main():
             loss = trainer.finetune(dataset, steps=finetune_steps)
             del dataset
             
-            # if i % plotting_freq == 0:
             total_steps_made += 1
-            if total_steps_made % 10 == 0:
+            if total_steps_made % plotting_freq == 0:
 
                 # Generate Samples
                 tmp_model = copy.deepcopy(trainer.fine_model)
@@ -338,6 +337,7 @@ def main():
                 if am_stats[-1]["total_reward"] > am_best_total_reward:
                     am_best_total_reward = am_stats[-1]["total_reward"]
                     am_best_iteration = i
+                tmp_log["total_best_reward"] = am_best_total_reward
 
                 if rc_fine_tune_freq > 0 and (i % rc_fine_tune_freq == 0):
                     
@@ -362,8 +362,6 @@ def main():
                     logs = {}
                     logs.update(tmp_log)
                     logs.update(log_pred_vs_real)
-                    logs.update({"loss": tmp_log["loss"],
-                                 "total_best_reward": am_best_total_reward})
                     log = alm.get_statistics()
                     if config.rc_finetune is not None and config.rc_finetune.reward:
                         logs.update(r_history)
@@ -375,7 +373,7 @@ def main():
                 del dgl_mols, rd_mols, true_reward, true_constraint, pred_rc, log_pred_vs_real, tmp_log
 
                 print(f"\tIteration {i}: Total Reward: {am_stats[-1]['total_reward']:.4f}, Reward: {am_stats[-1]['reward']:.4f}, "
-                  f"Constraint: {am_stats[-1]['constraint']:.4f}, Violations: {am_stats[-1]['constraint_violations']:.4f}", flush=True)
+                      f"Constraint: {am_stats[-1]['constraint']:.4f}, Violations: {am_stats[-1]['constraint_violations']:.4f}", flush=True)
                 print(f"\tBest reward: {am_best_total_reward:.4f} in step {am_best_iteration}", flush=True)
         
         full_stats.extend(am_stats)
