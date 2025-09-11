@@ -121,6 +121,9 @@ def main():
     traj_len = config.adjoint_matching.sampling.num_integration_steps
     finetune_steps = config.adjoint_matching.sampling.num_samples // config.adjoint_matching.batch_size
 
+    # Online fintuning
+    config.rc_finetune = config.get("rc_finetune", None)
+
     num_iterations = config.total_iterations // lagrangian_updates
     plotting_freq = num_iterations // 5
 
