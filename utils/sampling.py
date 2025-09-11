@@ -14,6 +14,7 @@ def sampling(
     config: OmegaConf,
     model: flowmol.FlowMol,
     device: torch.device,
+    return_batched: bool = True,
     min_num_atoms: Optional[int] = None,
     max_num_atoms: Optional[int] = None,
     n_atoms: Optional[int] = None,
@@ -78,6 +79,8 @@ def sampling(
     for mol in new_molecules:
         dgl_mols.append(copy.deepcopy(mol.g))
         rd_mols.append(copy.deepcopy(mol.rdkit_mol))
+
+    if return_batched:
+        dgl_mols = dgl.batch(dgl_mols).to(device)
     
-    dgl_mols = dgl.batch(dgl_mols).to(device)
     return dgl_mols, rd_mols

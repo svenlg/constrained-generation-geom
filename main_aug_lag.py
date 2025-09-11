@@ -13,9 +13,10 @@ from pathlib import Path
 from datetime import datetime
 from omegaconf import OmegaConf
 
-from utils import parse_args, update_config_with_args, set_seed, sampling
 
+from utils import parse_args, update_config_with_args, set_seed, sampling
 from true_rc import pred_vs_real
+from regessor import setup_fine_tuner, finetune
 
 import dgl
 import flowmol
@@ -180,7 +181,12 @@ def main():
 
     # Setup - Reward and Constraint Functions
     reward_model, reward_model_config = load_regressor(config.reward, device=device)
+    if config.rc_finetune.reward:
+        reward_finetuner = setup_fine_tuner(config.reward.fn, reward_model, config.rc_finetune)
     constraint_model, constraint_model_config = load_regressor(config.constraint, device=device)
+    if config.rc_finetune.constraint:
+        constraint_finetuner = setup_fine_tuner(config.constraint.fn, constraint_model, config.rc_finetune)
+    rc_fine_tune_freq = config.rc_finetune.get("freq", 0) if config.rc_finetune.reward or config.rc_finetune.constraint else 0
 
     # Setup - Environment, AugmentedReward, ConstraintModel
     augmented_reward = AugmentedReward(
@@ -320,10 +326,8 @@ def main():
 
                 # Compute reward for current samples
                 _ = augmented_reward(dgl_mols)
-                del dgl_mols
                 pred_rc = augmented_reward.get_full_statistics()
-                log_pred_vs_real = pred_vs_real(rd_mols, pred_rc, reward=config.reward.fn, constraint=config.constraint.fn)
-                del rd_mols
+                log_pred_vs_real, true_reward, true_constraint = pred_vs_real(rd_mols, pred_rc, reward=config.reward.fn, constraint=config.constraint.fn)
                 tmp_log = augmented_reward.get_statistics()
                 tmp_log["loss"] = loss/reward_lambda/(traj_len//2)
                 am_stats.append(tmp_log)
@@ -332,6 +336,25 @@ def main():
                     am_best_total_reward = am_stats[-1]["total_reward"]
                     am_best_iteration = i
 
+                if rc_fine_tune_freq > 0 and (i % rc_fine_tune_freq == 0):
+                    
+                    if config.rc_finetune.reward:
+                        r_history = finetune(
+                            property = config.reward.fn,
+                            finetuner = reward_finetuner,
+                            data = [mol for mol in dgl.unbatch(dgl_mols.cpu())],
+                            targets = true_reward,
+                            config = config.rc_finetune,
+                        )
+                    if config.rc_finetune.constraint:
+                        c_history = finetune(
+                            property = config.constraint.fn,
+                            finetuner = constraint_finetuner,
+                            data = [mol for mol in dgl.unbatch(dgl_mols.cpu())],
+                            targets = true_constraint,
+                            config = config.rc_finetune,
+                        )
+                
                 if use_wandb:
                     logs = {}
                     logs.update(tmp_log)
@@ -339,11 +362,17 @@ def main():
                     logs.update({"loss": tmp_log["loss"],
                                  "total_best_reward": am_best_total_reward})
                     log = alm.get_statistics()
+                    if config.rc_finetune.reward:
+                        logs.update(r_history)
+                    if config.rc_finetune.constraint:
+                        logs.update(c_history)
                     logs.update(log)
                     wandb.log(logs)
 
+                del dgl_mols, rd_mols, true_reward, true_constraint, pred_rc, log_pred_vs_real, tmp_log
+
                 print(f"\tIteration {i}: Total Reward: {am_stats[-1]['total_reward']:.4f}, Reward: {am_stats[-1]['reward']:.4f}, "
-                      f"Constraint: {am_stats[-1]['constraint']:.4f}, Violations: {am_stats[-1]['constraint_violations']:.4f}", flush=True)
+                  f"Constraint: {am_stats[-1]['constraint']:.4f}, Violations: {am_stats[-1]['constraint_violations']:.4f}", flush=True)
                 print(f"\tBest reward: {am_best_total_reward:.4f} in step {am_best_iteration}", flush=True)
         
         full_stats.extend(am_stats)

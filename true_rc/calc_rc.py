@@ -60,4 +60,4 @@ def pred_vs_real(rd_mols: List, pred_dict: dict, reward: str, constraint: str) -
         "true/constraint_std": true_constraint.std(),
     }
 
-    return return_dict
+    return return_dict, true_reward, true_constraint
