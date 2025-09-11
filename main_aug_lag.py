@@ -184,12 +184,12 @@ def main():
 
     # Setup - Reward and Constraint Functions
     reward_model, reward_model_config = load_regressor(config.reward, device=device)
-    if config.rc_finetune.reward:
+    if config.rc_finetune is not None and config.rc_finetune.reward:
         reward_finetuner = setup_fine_tuner(config.reward.fn, reward_model, config.rc_finetune)
     constraint_model, constraint_model_config = load_regressor(config.constraint, device=device)
-    if config.rc_finetune.constraint:
+    if config.rc_finetune is not None and config.rc_finetune.constraint:
         constraint_finetuner = setup_fine_tuner(config.constraint.fn, constraint_model, config.rc_finetune)
-    rc_fine_tune_freq = config.rc_finetune.get("freq", 0) if config.rc_finetune.reward or config.rc_finetune.constraint else 0
+    rc_fine_tune_freq = config.rc_finetune.get("freq", 0) if config.rc_finetune is not None and (config.rc_finetune.reward or config.rc_finetune.constraint) else 0
 
     # Setup - Environment, AugmentedReward, ConstraintModel
     augmented_reward = AugmentedReward(
