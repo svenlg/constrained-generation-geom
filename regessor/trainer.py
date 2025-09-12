@@ -96,7 +96,7 @@ class GNNFineTuner:
         for graphs, targets in loader:
             graphs = graphs.to(self.device)
             targets = targets.to(self.device)
-            outputs = self.model(graphs).squeeze(-1)
+            outputs = self.model(graphs)
             loss = self.loss_fn(outputs, targets)
             losses.append(loss.item())
             preds_all.append(outputs.detach().cpu())
@@ -143,7 +143,7 @@ class GNNFineTuner:
         it = itertools.cycle(loader)  # cycle through small datasets for step-based updates
 
         self.model.train()
-        history = {f"{self.property}/step_loss": []}
+        step_loss = []
 
         for step in range(1, steps + 1):
             graphs, tgts = next(it)
@@ -153,7 +153,7 @@ class GNNFineTuner:
             self.optimizer.zero_grad(set_to_none=set_to_none)
 
             with autocast(enabled=self.amp):
-                outputs = self.model(graphs).squeeze(-1)
+                outputs = self.model(graphs)
                 loss = self.loss_fn(outputs, tgts)
 
             # backward + step with AMP + grad clipping
@@ -168,8 +168,10 @@ class GNNFineTuner:
             self.scaler.update()
 
             if (step % log_interval) == 0 or step == steps:
-                history[f"{self.property}/step_loss"].append(float(loss.item()))
+                step_loss.append(float(loss.item()))
 
+        step_loss = np.mean(step_loss)
+        history = {f"{self.property}/step_loss": step_loss}
         # Evaluate after fine-tune
         history[f"{self.property}/eval"] = self.evaluate(eval_loader)
 
@@ -185,12 +187,11 @@ class GNNFineTuner:
         self.model.load_state_dict(state["model"], strict=strict)
 
 
-
 def setup_fine_tuner(property: str, model: nn.Module, config: OmegaConf = None) -> GNNFineTuner:
     fine_tuner = GNNFineTuner(
         property=property,
         model=model,
-        learning_rate=1e-5 if config is None else config.get("learning_rate", 1e-5),
+        learning_rate=1e-5 if config is None else config.get("lr", 1e-5),
         weight_decay=1e-6 if config is None else config.get("weight_decay", 1e-6),
         grad_clip=1.0 if config is None else config.get("grad_clip", 1.0),
         amp=True,
@@ -210,7 +211,7 @@ def finetune(
     - Runs fine-tuning on the provided new graphs/targets.
     - Returns the training history.
     """
-    print(f"Fine-tuning for property '{property}' with {len(data)} samples...")
+    # print(f"Fine-tuning for property '{property}' with {len(data)} samples...")
     history = finetuner.fit(
         data=data,
         targets=targets,
@@ -220,5 +221,5 @@ def finetune(
         log_interval=20 if config is None else config.get("log_interval", 20),
     )
     eval_metrics = history.get(f"{property}/eval", {})
-    print(f"\tEval: loss: {eval_metrics.get('loss', 0):.4f} | mae: {eval_metrics.get('mae', 0):.4f} | rmse: {eval_metrics.get('rmse', 0):.4f} | r2: {eval_metrics.get('r2', 0):.4f}", flush=True)
+    # print(f"\tEval: loss: {eval_metrics.get('loss', 0):.4f} | mae: {eval_metrics.get('mae', 0):.4f} | rmse: {eval_metrics.get('rmse', 0):.4f} | r2: {eval_metrics.get('r2', 0):.4f}", flush=True)
     return history

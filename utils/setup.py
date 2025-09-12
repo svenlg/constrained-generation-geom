@@ -70,6 +70,19 @@ def parse_args():
                         help="Minimum number of atoms per molecule, int or null")
     parser.add_argument("--max_num_atoms", type=int,
                         help="Maximum number of atoms per molecule, int or null")
+    # Finetuning RC models
+    parser.add_argument("--reward_finetuning", action='store_true',
+                        help="Whether to finetune the reward model, default: false")
+    parser.add_argument("--constraint_finetuning", action='store_true',
+                        help="Whether to finetune the constraint model, default: false")
+    parser.add_argument("--finetune_freq", type=int,
+                        help="Frequency of finetuning steps, int or null")
+    parser.add_argument("--finetune_lr", type=float,
+                        help="Learning rate for finetuning, float or null")
+    parser.add_argument("--finetune_weight_decay", type=float,
+                        help="Weight decay for finetuning, float or null")
+    parser.add_argument("--finetune_clip_grad_norm", type=float,
+                        help="Clip grad norm for finetuning, float or null")
     return parser.parse_args()
 
 
@@ -130,5 +143,18 @@ def update_config_with_args(config, args):
         config.min_num_atoms = args.min_num_atoms
     if args.max_num_atoms is not None:
         config.max_num_atoms = args.max_num_atoms
+    # Finetuning RC models
+    if args.reward_finetuning:
+        config.reward.fine_tuning = True
+    if args.constraint_finetuning:
+        config.constraint.fine_tuning = True
+    if args.finetune_freq is not None:
+        config.rc_finetune.freq = args.finetune_freq
+    if args.finetune_lr is not None:
+        config.rc_finetune.lr = args.finetune_lr
+    if args.finetune_weight_decay is not None:
+        config.rc_finetune.weight_decay = args.finetune_weight_decay
+    if args.finetune_clip_grad_norm is not None:
+        config.rc_finetune.clip_grad_norm = args.finetune_clip_grad_norm
     return config
 

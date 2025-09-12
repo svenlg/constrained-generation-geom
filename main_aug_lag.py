@@ -122,14 +122,28 @@ def main():
     finetune_steps = config.adjoint_matching.sampling.num_samples // config.adjoint_matching.batch_size
 
     # Online fintuning
-    config.rc_finetune = config.get("rc_finetune", None)
+    config.rc_finetune = config.get("rc_finetune", OmegaConf.create({}))
+    config.rc_finetune.freq = config.rc_finetune.get("freq", 0)
 
-    num_iterations = config.total_iterations // lagrangian_updates
+    num_iterations = config.total_steps // lagrangian_updates
     plotting_freq = 10
 
     baseline = args.baseline
     if baseline:
         base_lambda = config.augmented_lagrangian.base_lambda
+
+    # Setup - Gen Model
+    base_model = setup_gen_model(config.flow_model, device=device)
+    gen_model = copy.deepcopy(base_model)
+
+    # Setup - Reward and Constraint Functions
+    reward_model, reward_model_config = load_regressor(config.reward, device=device)
+    if config.rc_finetune is not None and config.reward.fine_tuning:
+        reward_finetuner = setup_fine_tuner(config.reward.fn, reward_model, config.rc_finetune)
+    constraint_model, constraint_model_config = load_regressor(config.constraint, device=device)
+    if config.rc_finetune is not None and config.constraint.fine_tuning:
+        constraint_finetuner = setup_fine_tuner(config.constraint.fn, constraint_model, config.rc_finetune)
+    rc_fine_tune_freq = config.rc_finetune.freq if config.reward.fine_tuning or config.constraint.fine_tuning else 0
 
     if args.debug:
         config.augmented_lagrangian.sampling.num_samples = config.augmented_lagrangian.sampling.num_samples if torch.cuda.is_available() else 8
@@ -141,6 +155,7 @@ def main():
         args.save_samples = False
         num_iterations = 2
         lagrangian_updates = 2
+        rc_fine_tune_freq = 1
         print("Debug mode activated", flush=True)
 
     print(f"--- Start ---", flush=True)
@@ -177,19 +192,6 @@ def main():
     print(f"\tn_atoms: {n_atoms}", flush=True)
     print(f"\tmin_num_atoms: {min_num_atoms}", flush=True)
     print(f"\tmax_num_atoms: {max_num_atoms}", flush=True)
-
-    # Setup - Gen Model
-    base_model = setup_gen_model(config.flow_model, device=device)
-    gen_model = copy.deepcopy(base_model)
-
-    # Setup - Reward and Constraint Functions
-    reward_model, reward_model_config = load_regressor(config.reward, device=device)
-    if config.rc_finetune is not None and config.rc_finetune.reward:
-        reward_finetuner = setup_fine_tuner(config.reward.fn, reward_model, config.rc_finetune)
-    constraint_model, constraint_model_config = load_regressor(config.constraint, device=device)
-    if config.rc_finetune is not None and config.rc_finetune.constraint:
-        constraint_finetuner = setup_fine_tuner(config.constraint.fn, constraint_model, config.rc_finetune)
-    rc_fine_tune_freq = config.rc_finetune.get("freq", 0) if config.rc_finetune is not None and (config.rc_finetune.reward or config.rc_finetune.constraint) else 0
 
     # Setup - Environment, AugmentedReward, ConstraintModel
     augmented_reward = AugmentedReward(
@@ -239,7 +241,7 @@ def main():
     full_stats.append(tmp_log)
     # Compare with true value
     pred_rc = augmented_reward.get_full_statistics()
-    log_pred_vs_real = pred_vs_real(rd_mols, pred_rc, reward=config.reward.fn, constraint=config.constraint.fn)
+    log_pred_vs_real, _, _ = pred_vs_real(rd_mols, pred_rc, reward=config.reward.fn, constraint=config.constraint.fn)
 
     al_lowest_const = full_stats[-1]["constraint"]
     al_best_reward = full_stats[-1]["reward"]
@@ -340,8 +342,8 @@ def main():
                 tmp_log["total_best_reward"] = am_best_total_reward
 
                 if rc_fine_tune_freq > 0 and (i % rc_fine_tune_freq == 0):
-                    
-                    if config.rc_finetune.reward:
+
+                    if config.reward.fine_tuning:
                         r_history = finetune(
                             property = config.reward.fn,
                             finetuner = reward_finetuner,
@@ -349,7 +351,7 @@ def main():
                             targets = true_reward,
                             config = config.rc_finetune,
                         )
-                    if config.rc_finetune.constraint:
+                    if config.constraint.fine_tuning:
                         c_history = finetune(
                             property = config.constraint.fn,
                             finetuner = constraint_finetuner,
@@ -363,9 +365,9 @@ def main():
                     logs.update(tmp_log)
                     logs.update(log_pred_vs_real)
                     log = alm.get_statistics()
-                    if config.rc_finetune is not None and config.rc_finetune.reward:
+                    if config.reward.fine_tuning:
                         logs.update(r_history)
-                    if config.rc_finetune is not None and config.rc_finetune.constraint:
+                    if config.constraint.fine_tuning:
                         logs.update(c_history)
                     logs.update(log)
                     wandb.log(logs)
