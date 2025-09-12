@@ -320,7 +320,8 @@ def parse_args():
     p.add_argument("--property", type=str, required=True,
                    help="One of: score, energy, homo, lumo, homolumo_gap, dipole, dipole_zero")
     p.add_argument("-e", "--experiment", type=str, required=True, help="Path to data folder (same as before)")
-    p.add_argument("-m", "--model_type", type=str, required=True, help="One of: egnn, gnn")
+    model_type_choices = ["egnn", "gnn"]
+    p.add_argument("-m", "--model_type", type=str, required=True, choices=model_type_choices, help="One of: egnn, gnn")
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("-bs", "--batch_size", type=int, default=64)
     p.add_argument("-lr", "--learning_rate", type=float, default=1e-3)

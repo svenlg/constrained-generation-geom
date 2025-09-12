@@ -9,16 +9,6 @@ from dgl.dataloading import GraphDataLoader
 
 from flowmol.analysis.molecule_builder import SampledMolecule
 
-DATA_FRAME_COLS = [
-    "score",
-    "homolumo_gap",
-    "lumo",
-    "homo",
-    "dipole",
-    "energy",
-    "id_str"
-]
-
 class GenDataset(Dataset):
     """Dataset for GEOM molecular data with XTB property calculation."""
     
@@ -26,8 +16,8 @@ class GenDataset(Dataset):
         self, 
         property: str,
         experiment: str, 
+        split: str,
         max_nodes: int = 60,
-        split: str = "train",
     ):
         self.experiment = experiment
         self.split = split
@@ -42,7 +32,6 @@ class GenDataset(Dataset):
         self.path = f"data/{experiment}"
         self.mol_path = self.path + "/molecules"
         df = pd.read_csv(f"{self.path}/{self.split}.csv")
-        df = df[DATA_FRAME_COLS]
         self.df = df
 
     def _load_mols(self, idx) -> SampledMolecule:
@@ -64,7 +53,9 @@ class GenDataset(Dataset):
 
         target_value = torch.tensor(self.df.iloc[idx][self.property], dtype=torch.float32)
         if self.set_zero_dipole:
-            target_value = torch.tensor(0.0, dtype=torch.float32) if self.df.iloc[idx]['score'] > 0.0 else target_value
+            target_value = torch.tensor(0.0, dtype=torch.float32) if not self.df.iloc[idx]['all_atoms_connected'] else target_value
+        if self.property == "score": # punish disconnected graphs
+            target_value = torch.tensor(1.0, dtype=torch.float32) if not self.df.iloc[idx]['all_atoms_connected'] else target_value
 
         return mol, target_value
 
