@@ -324,7 +324,7 @@ def parse_args():
     p.add_argument("-m", "--model_type", type=str, required=True, choices=model_type_choices, help="One of: egnn, gnn")
     p.add_argument("--seed", type=int, default=None)
     p.add_argument("-bs", "--batch_size", type=int, default=64)
-    p.add_argument("-lr", "--learning_rate", type=float, default=1e-3)
+    p.add_argument("-lr", "--learning_rate", type=float, default=1e-4)
     p.add_argument("-wd", "--weight_decay", type=float, default=1e-5)
     p.add_argument("-hd", "--hidden_dim", type=int, default=96)
     p.add_argument("-d", "--depth", type=int, default=4)
