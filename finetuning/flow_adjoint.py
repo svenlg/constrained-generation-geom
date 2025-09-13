@@ -77,6 +77,7 @@ def create_timestep_subset(
         total_steps (int): Total number of time-steps in the process
         final_percent (float): Percentage of final steps to always include
         sample_percent (float): Percentage of additional steps to sample
+        samples_for_sumapproximation (int, optional): Maximum number of steps to include in the final subset. If None, includes all selected steps.
     
     Returns:
         np.ndarray: Sorted array of selected timestep indices
@@ -359,7 +360,7 @@ class AdjointMatchingFinetuningTrainerFlowMol:
         traj_v_base = sample['traj_v_base']
 
         # Get index for time steps to calculate adjoint matching loss
-        idxs = create_timestep_subset(ts.shape[0])
+        idxs = create_timestep_subset(ts.shape[0], self.final_percent, self.sample_percent, self.samples_for_sumapproximation)
 
         v_base = []
         v_fine = []
