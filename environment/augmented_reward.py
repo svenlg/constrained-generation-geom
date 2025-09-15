@@ -29,7 +29,7 @@ class AugmentedReward:
         self.rho_ = 1.0
 
         # For logging
-        self.last_grad_norms_full = None
+        self.last_grad_norm_full = None
         self.last_grad_norm_reward = None
         self.last_grad_norm_constraint = None
 
@@ -157,8 +157,8 @@ class AugmentedReward:
                 constraint_mean, inputs, retain_graph=True, allow_unused=True
             )
 
-            self.last_grad_norms_reward = self._stack_and_norm(reward_grads)
-            self.last_grad_norms_constraint = self._stack_and_norm(constraint_grads)
+            self.last_grad_norm_reward = self._stack_and_norm(reward_grads)
+            self.last_grad_norm_constraint = self._stack_and_norm(constraint_grads)
 
             # backprop for the full augmented objective (unchanged logic)
             tmp_augmented_reward.backward()  # no retain_graph needed since we collected the others first
@@ -183,7 +183,7 @@ class AugmentedReward:
                 # ------- NEW: full grad norm for tensor -------
                 full_grads = [x.grad]
 
-            self.last_grad_norms_full = self._stack_and_norm(full_grads)
+            self.last_grad_norm_full = self._stack_and_norm(full_grads)
 
         return grad
 
@@ -198,9 +198,9 @@ class AugmentedReward:
             "constraint": constraint,
             "total_reward": total_reward,
             "constraint_violations": constraint_violations,
-            "grad_norm_full": self.last_grad_norms_full,
-            "grad_norm_reward": self.last_grad_norms_reward,
-            "grad_norm_constraint": self.last_grad_norms_constraint,
+            "grad_norm_full": self.last_grad_norm_full,
+            "grad_norm_reward": self.last_grad_norm_reward,
+            "grad_norm_constraint": self.last_grad_norm_constraint,
         }
 
     def get_reward_constraint(self) -> dict:
