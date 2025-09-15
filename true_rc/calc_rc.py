@@ -12,11 +12,10 @@ logging.getLogger("rdkit").setLevel(logging.CRITICAL)
 def get_rc_properties(rd_mols: List, verbose: bool = False, return_dict: bool = False) -> List[dict]:
     # Get PoseBusters Feedback
     tmp_time = time.time()
-    df_scores = posebusters_score(rd_mols)
+    df_scores = posebusters_score(rd_mols, disconnected=True)
     if verbose:
         print(f"PoseBusters time: {time.time() - tmp_time:.2f} seconds", flush=True)
 
-    ######
     # XTB-Calulations
     tmp_time = time.time()
     properties = []

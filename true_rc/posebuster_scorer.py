@@ -25,7 +25,7 @@ POSEBUSTERS_WEIGHTS = {
     "internal_energy": 0.05,
 }
 
-def posebusters_score(rd_mols: List) -> pd.Series:
+def posebusters_score(rd_mols: List, disconnected:bool=False) -> pd.Series:
     """
     Returns a pandas Series aligned to df.index.
     """
@@ -38,10 +38,13 @@ def posebusters_score(rd_mols: List) -> pd.Series:
     df = df_scores.copy()
 
     # Weights
+    if disconnected:
+        POSEBUSTERS_WEIGHTS["all_atoms_connected"] = 1.0
+    
     W = np.array([v for k,v in POSEBUSTERS_WEIGHTS.items() if k in df.columns])
     if W.shape[0] != len(df.columns):
         raise ValueError(f"weights length ({W.shape[0]}) must match number of used columns ({len(df.columns)}).")
-    
+
     # Weighted failure score
     fails = ~df
     score = (fails * W).sum(axis=1).astype(float)
