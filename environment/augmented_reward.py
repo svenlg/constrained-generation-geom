@@ -183,6 +183,11 @@ class AugmentedReward:
                 # ------- NEW: full grad norm for tensor -------
                 full_grads = [x.grad]
 
+            # take out the alpha scaling for logging
+            for tmp in full_grads:
+                if tmp is not None:
+                    tmp /= self.alpha
+
             self.last_grad_norm_full = self._stack_and_norm(full_grads)
 
         return grad
