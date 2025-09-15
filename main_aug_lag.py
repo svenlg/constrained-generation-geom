@@ -240,7 +240,7 @@ def main():
     tmp_log = augmented_reward.get_statistics()
     full_stats.append(tmp_log)
     # Compare with true value
-    pred_rc = augmented_reward.get_full_statistics()
+    pred_rc = augmented_reward.get_reward_constraint()
     log_pred_vs_real, _, _ = pred_vs_real(rd_mols, pred_rc, reward=config.reward.fn, constraint=config.constraint.fn)
 
     al_lowest_const = full_stats[-1]["constraint"]
@@ -330,7 +330,7 @@ def main():
 
                 # Compute reward for current samples
                 _ = augmented_reward(dgl_mols)
-                pred_rc = augmented_reward.get_full_statistics()
+                pred_rc = augmented_reward.get_reward_constraint()
                 log_pred_vs_real, true_reward, true_constraint = pred_vs_real(rd_mols, pred_rc, reward=config.reward.fn, constraint=config.constraint.fn)
                 tmp_log = augmented_reward.get_statistics()
                 tmp_log["loss"] = loss/reward_lambda/(traj_len//2)
