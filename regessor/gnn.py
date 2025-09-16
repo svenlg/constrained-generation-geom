@@ -55,6 +55,10 @@ class GNN(nn.Module):
             h = dgl.readout_nodes(g, "h", op="mean")
             return self.output(self.head(h) / self.tau)
 
+    def score(self, score_logit: torch.Tensor, detach: bool = True):
+        p = torch.sigmoid(score_logit)
+        return p.detach() if detach else p
+
 
 class ResBlock(nn.Module):
     def __init__(self, in_dim: int, out_dim: int):

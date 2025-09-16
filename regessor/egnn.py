@@ -39,7 +39,6 @@ class GaussianRBF(nn.Module):
         return torch.exp(-0.5 * x**2)  # (..., K)
 
 
-
 # ---------- EGNN (SO(3)/E(n) equivariant) block ----------
 class EGNNBlock(nn.Module):
     """
@@ -116,7 +115,6 @@ class EGNNBlock(nn.Module):
 
 
 # ---------- Full Model ----------
-
 class MoleculeGNN(nn.Module):
     """
     A single model that can run in:
@@ -207,3 +205,8 @@ class MoleculeGNN(nn.Module):
             hg = dgl.readout_nodes(g, "h_final", op="mean")
             out = self.head(hg) / self.tau
             return self.output(out)
+
+    def score(self, score_logit: torch.Tensor, detach: bool = True):
+        p = torch.sigmoid(score_logit)
+        return p.detach() if detach else p
+
