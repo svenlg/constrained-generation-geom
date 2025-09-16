@@ -206,7 +206,8 @@ class MoleculeGNN(nn.Module):
             out = self.head(hg) / self.tau
             return self.output(out)
 
-    def score(self, score_logit: torch.Tensor, detach: bool = True):
+    def score(self, g: dgl.DGLGraph) -> torch.Tensor:
+        score_logit = self(g)
         p = torch.sigmoid(score_logit)
-        return p.detach() if detach else p
+        return p.detach()
 

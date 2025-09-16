@@ -346,7 +346,6 @@ def main():
 
                     if config.reward.fine_tuning:
                         r_history = finetune(
-                            property = config.reward.fn,
                             finetuner = reward_finetuner,
                             data = [mol for mol in dgl.unbatch(dgl_mols.cpu())],
                             targets = true_reward,
@@ -354,7 +353,6 @@ def main():
                         )
                     if config.constraint.fine_tuning:
                         c_history = finetune(
-                            property = config.constraint.fn,
                             finetuner = constraint_finetuner,
                             data = [mol for mol in dgl.unbatch(dgl_mols.cpu())],
                             targets = true_constraint,

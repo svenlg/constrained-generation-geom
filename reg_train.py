@@ -87,6 +87,9 @@ def evaluate(model: nn.Module, loader: GraphDataLoader, device: torch.device,
     preds = torch.cat(all_preds).numpy()
     tgts = torch.cat(all_tgts).numpy()
 
+    if isinstance(loss_fn, nn.BCEWithLogitsLoss):
+        preds = torch.sigmoid(torch.tensor(preds)).numpy()
+
     mae = mean_absolute_error(tgts, preds)
     rmse = float(np.sqrt(mean_squared_error(tgts, preds)))
     r2 = r2_score(tgts, preds)

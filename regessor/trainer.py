@@ -67,7 +67,10 @@ class GNNFineTuner:
         self.model.to(self.device)
 
         self.optimizer = Adam(self.model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-        self.loss_fn = nn.MSELoss()
+        if self.property == "score":
+            self.loss_fn = nn.BCEWithLogitsLoss()
+        else:
+            self.loss_fn = nn.MSELoss()
         self.grad_clip = grad_clip
         self.amp = amp and torch.cuda.is_available()
         self.scaler = GradScaler(enabled=self.amp)
@@ -122,7 +125,6 @@ class GNNFineTuner:
         steps: int = 200,
         batch_size: int = 32,
         num_workers: int = 0,
-        log_interval: int = 20,
         eval_split: float = 0.2,
         set_to_none: bool = True,
     ) -> Dict[str, Any]:
@@ -143,7 +145,6 @@ class GNNFineTuner:
         it = itertools.cycle(loader)  # cycle through small datasets for step-based updates
 
         self.model.train()
-        step_loss = []
 
         for step in range(1, steps + 1):
             graphs, tgts = next(it)
@@ -167,12 +168,8 @@ class GNNFineTuner:
             self.scaler.step(self.optimizer)
             self.scaler.update()
 
-            if (step % log_interval) == 0 or step == steps:
-                step_loss.append(float(loss.item()))
-
-        step_loss = np.mean(step_loss)
-        history = {f"{self.property}/step_loss": step_loss}
         # Evaluate after fine-tune
+        history = {}
         history[f"{self.property}/eval"] = self.evaluate(eval_loader)
 
         self.model.eval()
@@ -200,7 +197,6 @@ def setup_fine_tuner(property: str, model: nn.Module, config: OmegaConf = None) 
 
 
 def finetune(
-    property: str,
     finetuner: GNNFineTuner,
     data: List[DGLGraph],
     targets: Union[torch.Tensor, np.ndarray, List[float]],
@@ -211,7 +207,6 @@ def finetune(
     - Runs fine-tuning on the provided new graphs/targets.
     - Returns the training history.
     """
-    # print(f"Fine-tuning for property '{property}' with {len(data)} samples...")
     history = finetuner.fit(
         data=data,
         targets=targets,
@@ -220,6 +215,4 @@ def finetune(
         num_workers=0 if config is None else config.get("num_workers", 0),
         log_interval=20 if config is None else config.get("log_interval", 20),
     )
-    eval_metrics = history.get(f"{property}/eval", {})
-    # print(f"\tEval: loss: {eval_metrics.get('loss', 0):.4f} | mae: {eval_metrics.get('mae', 0):.4f} | rmse: {eval_metrics.get('rmse', 0):.4f} | r2: {eval_metrics.get('r2', 0):.4f}", flush=True)
     return history
