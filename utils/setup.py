@@ -83,6 +83,13 @@ def parse_args():
                         help="Weight decay for finetuning, float or null")
     parser.add_argument("--finetune_clip_grad_norm", type=float,
                         help="Clip grad norm for finetuning, float or null")
+    # Augmented Reward Normalization
+    parser.add_argument("--augmented_reward_normalize", type=bool,
+                        help="Whether to normalize the terms in the augmented reward")
+    parser.add_argument("--augmented_reward_target", type=float,
+                        help="Target value for normalization")
+    parser.add_argument("--augmented_reward_eps", type=float,
+                        help="Epsilon value for normalization")
     return parser.parse_args()
 
 
@@ -156,5 +163,12 @@ def update_config_with_args(config, args):
         config.rc_finetune.weight_decay = args.finetune_weight_decay
     if args.finetune_clip_grad_norm is not None:
         config.rc_finetune.clip_grad_norm = args.finetune_clip_grad_norm
+    # Augmented Reward Normalization
+    if args.augmented_reward_normalize is not None:
+        config.augmented_reward.normalize = args.augmented_reward_normalize
+    if args.augmented_reward_target is not None:
+        config.augmented_reward.target = args.augmented_reward_target
+    if args.augmented_reward_eps is not None:
+        config.augmented_reward.eps = args.augmented_reward_eps
     return config
 

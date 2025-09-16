@@ -199,6 +199,7 @@ def main():
         constraint_fn = constraint_model,
         alpha = reward_lambda,
         bound = config.constraint.bound,
+        config = config.augmented_reward,
         device = device,
     )
     

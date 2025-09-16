@@ -2,6 +2,8 @@ import copy
 import torch
 import dgl
 from typing import Union
+from omegaconf import OmegaConf
+
 
 class AugmentedReward:
     def __init__(
@@ -11,6 +13,7 @@ class AugmentedReward:
             alpha: float,
             bound: float,
             device: torch.device = None,
+            config: OmegaConf = None,
         ):
 
         self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -28,11 +31,20 @@ class AugmentedReward:
         self.lambda_ = 0.0
         self.rho_ = 1.0
 
+        # Normalization parameters
+        self.normalize = bool(config.get("normalize", False))
+        self.normalize_target = float(config.get("target", 1.0))
+        self.normalize_eps = float(config.get("eps", 1e-12))
+
         # For logging
         self.last_grad_norm_full = None
         self.last_grad_norm_reward = None
         self.last_grad_norm_constraint = None
         self.last_grad_norm_penalty = None
+
+    def set_lambda_rho(self, lambda_: float, rho_: float):
+        self.lambda_ = copy.deepcopy(float(lambda_))
+        self.rho_ = copy.deepcopy(float(rho_))
 
     def _stack_and_norm(self, tensors) -> float:
         # tensors: iterable of tensors or None
@@ -42,24 +54,40 @@ class AugmentedReward:
         v = torch.cat(flats)
         # keep on device, but return a CPU float
         return torch.linalg.vector_norm(v).detach().cpu().item()
-
-    def set_lambda_rho(self, lambda_: float, rho_: float):
-        self.lambda_ = copy.deepcopy(float(lambda_))
-        self.rho_ = copy.deepcopy(float(rho_))
     
-    def __call__(self, x: torch.Tensor) -> torch.Tensor:
-        # We want to maximize reward and minimize constraint
-        # Note lambda < 0, rho > 0
-        self.tmp_reward = self.reward_fn(x)
-        self.tmp_constraint = self.constraint_fn(x)
+    def _scale_grad_list_to_norm(self, grads):
+        """
+        Scale a list of grads so that the concatenated L2 norm equals self.normalize_target.
+        None entries remain None. Returns new list.
+        """
+        cur = self._stack_and_norm(grads)
+        if cur <= self.normalize_eps:
+            return [None if g is None else g for g in grads], 0.0  # no scaling, report norm 0
+        scale = self.normalize_target / (cur + self.normalize_eps)
+        return [None if g is None else g * scale for g in grads]
+
+    def _penalty_coeff_scalar(self) -> torch.Tensor:
+        """
+        Compute scalar coefficient: mean( rho * relu(g) ), with
+        g = constraint - bound - lambda/rho. Returns a scalar tensor on the right device.
+        """
         tmp_lambda = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.lambda_
         tmp_rho = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.rho_
         tmp_zero = torch.zeros_like(self.tmp_constraint, device=self.tmp_constraint.device)
         tmp_bound = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.bound
-        self.tmp_total = (
-                self.tmp_reward - tmp_rho/2 * torch.max(tmp_zero, self.tmp_constraint - tmp_bound - tmp_lambda/tmp_rho)**2
-            ).mean()
-        return self.alpha * self.tmp_total
+        g = self.tmp_constraint - tmp_bound - tmp_lambda / tmp_rho
+        coeff = (tmp_rho * torch.max(tmp_zero, g)).mean()
+        return coeff
+
+    def _materialize_grads_like_inputs(self, inputs, grads):
+        # Replace None grads with zeros_like corresponding input so we can safely package returns.
+        out = []
+        for ref, g in zip(inputs, grads):
+            if g is None:
+                out.append(torch.zeros_like(ref))
+            else:
+                out.append(g)
+        return out
 
     def _ensure_eval_mode(self):
         if isinstance(self.reward_fn, torch.nn.Module):
@@ -84,9 +112,9 @@ class AugmentedReward:
     def _penalty_mean(self) -> torch.Tensor:
         """Compute mean((rho/2)*relu(g)^2) with g = constraint - bound - lambda/rho, matching __call__."""
         tmp_lambda = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.lambda_
-        tmp_rho    = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.rho_
-        tmp_zero   = torch.zeros_like(self.tmp_constraint, device=self.tmp_constraint.device)
-        tmp_bound  = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.bound
+        tmp_rho = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.rho_
+        tmp_zero = torch.zeros_like(self.tmp_constraint, device=self.tmp_constraint.device)
+        tmp_bound = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.bound
         g = self.tmp_constraint - tmp_bound - tmp_lambda / tmp_rho
         relu_g = torch.max(tmp_zero, g)  # same as torch.clamp(g, min=0)
         return ((tmp_rho / 2.0) * (relu_g ** 2)).mean()
@@ -119,6 +147,20 @@ class AugmentedReward:
             if g is not None:
                 g /= self.alpha
 
+    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+        # We want to maximize reward and minimize constraint
+        # Note lambda < 0, rho > 0
+        self.tmp_reward = self.reward_fn(x)
+        self.tmp_constraint = self.constraint_fn(x)
+        tmp_lambda = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.lambda_
+        tmp_rho = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.rho_
+        tmp_zero = torch.zeros_like(self.tmp_constraint, device=self.tmp_constraint.device)
+        tmp_bound = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.bound
+        self.tmp_total = (
+                self.tmp_reward - tmp_rho/2 * torch.max(tmp_zero, self.tmp_constraint - tmp_bound - tmp_lambda/tmp_rho)**2
+            ).mean()
+        return self.alpha * self.tmp_total
+
     def grad_augmented_reward_fn(self, x: Union[torch.Tensor, dgl.DGLGraph]) -> torch.Tensor:
         self._ensure_eval_mode()
         with torch.enable_grad():
@@ -127,18 +169,72 @@ class AugmentedReward:
             # forward: fills self.tmp_reward, self.tmp_constraint, self.tmp_total
             tmp_augmented_reward = self(x)
 
-            # per-term grad norms
-            self.last_grad_norm_reward = self._autograd_norm(self.tmp_reward.mean(), inputs)
-            self.last_grad_norm_constraint = self._autograd_norm(self.tmp_constraint.mean(), inputs)
-            self.last_grad_norm_penalty = self._autograd_norm(self._penalty_mean(), inputs)
+            if self.normalize:
+                # ----- Build normalized rg and cg -----
+                # raw grads
+                rg_raw = torch.autograd.grad(self.tmp_reward.mean(), inputs, retain_graph=True, allow_unused=True)
+                cg_raw = torch.autograd.grad(self.tmp_constraint.mean(), inputs, retain_graph=False, allow_unused=True)
 
-            # full objective backward
-            tmp_augmented_reward.backward()
+                # normalize each to unit norm
+                rg = self._scale_grad_list_to_norm(rg_raw)
+                cg = self._scale_grad_list_to_norm(cg_raw)
 
-            # package grads & full norm
-            grad, full_grads = self._build_grad_and_collect_full_grads(x)
-            self._unscale_full_grads_inplace(full_grads)
-            self.last_grad_norm_full = self._stack_and_norm(full_grads)
+                # coeff = mean( rho * relu(g) ) as a scalar
+                coeff = self._penalty_coeff_scalar()
+
+                # update logs to reflect the enforced norms
+                self.last_grad_norm_reward = self._stack_and_norm(rg)
+                self.last_grad_norm_constraint = self._stack_and_norm(cg)
+                # penalty component in the composed gradient is: coeff * cg, and ||cg|| = 1  => norm = |coeff|
+                self.last_grad_norm_penalty = float(torch.abs(coeff).detach().cpu().item()) * self.last_grad_norm_constraint
+
+                # compose full gradient: rg - coeff * cg
+                combined = [
+                    None if (r is None and c is None)
+                    else ( (0.0 if r is None else r) - coeff * (0.0 if c is None else c) )
+                    for r, c in zip(rg, cg)
+                ]
+
+                # keep return semantics consistent with previous version (alpha scaling applied to the full obj)
+                combined_alpha = [None if g is None else self.alpha * g for g in combined]
+
+                # materialize Nones to zeros so packaging never fails
+                combined_alpha = self._materialize_grads_like_inputs(inputs, combined_alpha)
+
+                # package grads & log full norm (unscaled by alpha for parity with your logs)
+                if isinstance(x, dgl.DGLGraph):
+                    grad = dgl.graph((x.edges()[0], x.edges()[1]), num_nodes=x.num_nodes(), device=x.device)
+                    grad.set_batch_num_nodes(x.batch_num_nodes())
+                    grad.set_batch_num_edges(x.batch_num_edges())
+
+                    # order matches inputs: x_t, a_t, c_t, e_t
+                    grad.ndata['x_t'] = combined_alpha[0].clone().detach().requires_grad_(False)
+                    grad.ndata['a_t'] = combined_alpha[1].clone().detach().requires_grad_(False)
+                    grad.ndata['c_t'] = combined_alpha[2].clone().detach().requires_grad_(False)
+                    grad.edata['e_t'] = combined_alpha[3].clone().detach().requires_grad_(False)
+                    grad.edata['ue_mask'] = x.edata['ue_mask'].detach().clone()
+
+                    full_grads = [combined_alpha[0], combined_alpha[1], combined_alpha[2], combined_alpha[3]]
+                else:
+                    grad = combined_alpha[0].clone().detach().requires_grad_(False)
+                    full_grads = [combined_alpha[0]]
+
+                # log full norm with alpha unscaled (to match your previous convention)
+                full_grads_unscaled = [g / self.alpha for g in full_grads]
+                self.last_grad_norm_full = self._stack_and_norm(full_grads_unscaled)
+
+            else:
+                # per-term grad norms
+                self.last_grad_norm_reward = self._autograd_norm(self.tmp_reward.mean(), inputs)
+                self.last_grad_norm_constraint = self._autograd_norm(self.tmp_constraint.mean(), inputs)
+                self.last_grad_norm_penalty = self._autograd_norm(self._penalty_mean(), inputs)
+
+                # true objective gradient via backward ---
+                tmp_augmented_reward.backward()
+
+                grad, full_grads = self._build_grad_and_collect_full_grads(x)
+                self._unscale_full_grads_inplace(full_grads)  # divide by alpha for logging only
+                self.last_grad_norm_full = self._stack_and_norm(full_grads)
 
         return grad
 
