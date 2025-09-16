@@ -84,7 +84,7 @@ def parse_args():
     parser.add_argument("--finetune_clip_grad_norm", type=float,
                         help="Clip grad norm for finetuning, float or null")
     # Augmented Reward Normalization
-    parser.add_argument("--augmented_reward_normalize", type=bool,
+    parser.add_argument("--augmented_reward_normalize", action='store_true',
                         help="Whether to normalize the terms in the augmented reward")
     parser.add_argument("--augmented_reward_target", type=float,
                         help="Target value for normalization")
