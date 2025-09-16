@@ -23,7 +23,7 @@ from regessor import GNN, MoleculeGNN, make_loaders
 from utils.utils import set_seed
 
 
-def build_model(property: str, model:str, hidden_dim: int, depth: int, egnn_dict: Dict = None) -> nn.Module:
+def build_model(property: str, model: str, hidden_dim: int, depth: int) -> nn.Module:
     K_x = 3  # number of spatial dimensions (3D)
     K_a = 10 # number of atom features
     K_c = 6  # number of charge classes (0, +1, -1, +2)
@@ -37,11 +37,6 @@ def build_model(property: str, model:str, hidden_dim: int, depth: int, egnn_dict
             num_bond_types = K_e,
             hidden_dim = hidden_dim,
             depth = depth,
-            use_gumbel = egnn_dict.get("use_gumbel", True),              # flip to False to use prob-weighted embeddings
-            gumbel_tau = 1.0,
-            gumbel_hard = True,
-            equivariant = egnn_dict.get("equivariant", True),             # True -> EGNN (SO(3)/E(n) equivariant); False -> edge-aware scalar
-            rbf_k = 16,
         )
     if model == "gnn":
         model = GNN(
@@ -123,8 +118,6 @@ def train(
     weight_decay: float = 1e-5,
     hidden_dim: int = 256,
     depth: int = 8,
-    use_gumbel: bool = True,
-    equivariant: bool = True,
     max_epochs: int = 100,
     warmup_steps: int = 1000,
     grad_clip: float = 1.0,
@@ -146,15 +139,14 @@ def train(
     )
 
     # Model / Optim / Sched / Loss
-    egnn_dict = {
-        "use_gumbel": use_gumbel,
-        "equivariant": equivariant,
-    }
-    model = build_model(property, model_type, hidden_dim=hidden_dim, depth=depth, egnn_dict=egnn_dict).to(device)
+    model = build_model(property, model_type, hidden_dim=hidden_dim, depth=depth).to(device)
     optimizer = Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     total_steps = max_epochs * max(1, len(train_loader))
     scheduler = warmup_cosine_scheduler(optimizer, total_steps, warmup_steps, min_lr=1e-6)
-    loss_fn = nn.MSELoss()
+    if property == "score":
+        loss_fn = nn.BCEWithLogitsLoss()
+    else:
+        loss_fn = nn.MSELoss()
     scaler = GradScaler(enabled=amp)
 
     # Logging / Checkpoints
@@ -178,8 +170,6 @@ def train(
         "grad_clip": grad_clip,
         "seed": seed,
         "amp": amp,
-        "use_gumbel": use_gumbel,
-        "equivariant": equivariant,
     }
 
     # WandB
@@ -329,8 +319,6 @@ def parse_args():
     p.add_argument("-hd", "--hidden_dim", type=int, default=96)
     p.add_argument("-d", "--depth", type=int, default=4)
     p.add_argument("-me", "--max_epochs", type=int, default=100)
-    p.add_argument("--not_use_gumbel", action="store_false")
-    p.add_argument("--non_equivariant", action="store_false")
     p.add_argument("--warmup_steps", type=int, default=1000)
     p.add_argument("--num_workers", type=int, default=4)
     p.add_argument("--grad_clip", type=float, default=1.0)
@@ -367,8 +355,6 @@ if __name__ == "__main__":
         hidden_dim=args.hidden_dim,
         depth=args.depth,
         max_epochs=args.max_epochs,
-        use_gumbel=args.not_use_gumbel,
-        equivariant=args.non_equivariant,
         warmup_steps=args.warmup_steps,
         grad_clip=args.grad_clip,
         seed=args.seed,
