@@ -183,8 +183,8 @@ class AugmentedReward:
                 coeff = self._penalty_coeff_scalar()
 
                 # update logs to reflect the enforced norms
-                self.last_grad_norm_reward = self._stack_and_norm(rg)
-                self.last_grad_norm_constraint = self._stack_and_norm(cg)
+                self.last_grad_norm_reward = self.normalize_target
+                self.last_grad_norm_constraint = self.normalize_target
                 # penalty component in the composed gradient is: coeff * cg, and ||cg|| = 1  => norm = |coeff|
                 self.last_grad_norm_penalty = float(torch.abs(coeff).detach().cpu().item()) * self.last_grad_norm_constraint
 

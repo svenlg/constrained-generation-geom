@@ -5,30 +5,22 @@ import dgl
 import dgl.function as fn
 
 # ---------- Utilities ----------
-
 class CatProbEmbedding(nn.Module):
     """
     Embeds categorical distributions (probs) over K classes into R^D.
-    If use_gumbel=True: straight-through Gumbel-Softmax on log-probs, then onehot @ W.
-    Else: probs @ W (probability-weighted embedding).
     """
-    def __init__(self, num_classes: int, emb_dim: int, use_gumbel: bool = False, tau: float = 1.0, hard: bool = True):
+    def __init__(self, num_classes: int, emb_dim: int, tau: float = 1.0, hard: bool = True):
         super().__init__()
         self.linear = nn.Linear(num_classes, emb_dim, bias=False)  # unused, for compatibility
-        self.use_gumbel = use_gumbel
         self.tau = tau
         self.hard = hard
 
     def forward(self, probs: torch.Tensor) -> torch.Tensor:
         eps = 1e-12
-        if self.use_gumbel:
-            # gumbel_softmax expects logits; use log-probs for stability
-            logits = torch.log(probs.clamp(min=eps))
-            onehot = F.gumbel_softmax(logits, tau=self.tau, hard=self.hard, dim=-1)  # (N, K)
-            return self.linear(onehot)
-        else:
-            probs = probs / (probs.sum(dim=-1, keepdim=True) + eps)
-            return self.linear(probs)
+        # gumbel_softmax expects logits; use log-probs for stability
+        logits = torch.log(probs.clamp(min=eps))
+        onehot = F.gumbel_softmax(logits, tau=self.tau, hard=self.hard, dim=-1)  # (N, K)
+        return self.linear(onehot)
 
 
 class GaussianRBF(nn.Module):
@@ -47,44 +39,8 @@ class GaussianRBF(nn.Module):
         return torch.exp(-0.5 * x**2)  # (..., K)
 
 
-# ---------- Edge-aware (non-equivariant) block ----------
-
-class EdgeAwareBlock(nn.Module):
-    """
-    Message depends on edge embedding at every layer.
-    h_i' = LN( h_i + U([h_i, sum_j MLP([h_j, e_ij])]) )
-    """
-    def __init__(self, hidden_dim: int):
-        super().__init__()
-        self.msg_mlp = nn.Sequential(
-            nn.Linear(2 * hidden_dim, hidden_dim),
-            nn.SiLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-        )
-        self.upd_mlp = nn.Sequential(
-            nn.Linear(2 * hidden_dim, hidden_dim),
-            nn.SiLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-        )
-        self.norm = nn.LayerNorm(hidden_dim)
-
-    def message(self, edges):
-        h_j = edges.src["h"]                      # (E, H)
-        e_ij = edges.data["e_emb"]                # (E, H)
-        m_ij = self.msg_mlp(torch.cat([h_j, e_ij], dim=-1))  # (E, H)
-        return {"m": m_ij}
-
-    def forward(self, g: dgl.DGLGraph, h: torch.Tensor) -> torch.Tensor:
-        with g.local_scope():
-            g.ndata["h"] = h
-            g.update_all(self.message, fn.sum("m", "m_sum"))
-            m_sum = g.ndata["m_sum"]
-            h_upd = self.upd_mlp(torch.cat([h, m_sum], dim=-1))
-            return self.norm(h + h_upd)
-
 
 # ---------- EGNN (SO(3)/E(n) equivariant) block ----------
-
 class EGNNBlock(nn.Module):
     """
     EGNN-style block:
@@ -172,10 +128,6 @@ class MoleculeGNN(nn.Module):
       g.ndata['c_t'] : (N, Kc) charge-class probs  (if you have a scalar charge instead, map it beforehand)
       g.ndata['x_t'] : (N, 3)  coordinates
       g.edata['e_t'] : (E, Ke) bond-type probs
-
-    Config:
-      use_gumbel: if True, CatProbEmbedding uses straight-through Gumbel-Softmax on log-probs.
-      equivariant: if True, use EGNN blocks; else use edge-aware scalar message passing.
     """
     def __init__(
         self,
@@ -185,29 +137,20 @@ class MoleculeGNN(nn.Module):
         num_bond_types: int,
         hidden_dim: int = 256,
         depth: int = 6,
-        use_gumbel: bool = False,
+        use_gumbel: bool = True, # just in here for compatibility
         gumbel_tau: float = 1.0,
         gumbel_hard: bool = True,
-        equivariant: bool = False,
+        equivariant: bool = True, # just in here for compatibility
         rbf_k: int = 16,
     ):
         super().__init__()
         self.property = property
-        self.equivariant = equivariant
 
         # ---- Embeddings for categorical distributions ----
         d_each = hidden_dim // 3
-        self.atom_emb = CatProbEmbedding(num_atom_types, d_each, use_gumbel, gumbel_tau, gumbel_hard)
-        self.charge_emb = CatProbEmbedding(num_charge_classes, d_each, use_gumbel, gumbel_tau, gumbel_hard)
-        self.bond_emb = CatProbEmbedding(num_bond_types, d_each, use_gumbel, gumbel_tau, gumbel_hard)
-
-        # Position encoder for non-equivariant path (kept simple)
-        if not equivariant:
-            self.pos_enc = nn.Sequential(
-                nn.Linear(3, d_each),
-                nn.SiLU(),
-                nn.Linear(d_each, d_each),
-            )
+        self.atom_emb = CatProbEmbedding(num_atom_types, d_each, gumbel_tau, gumbel_hard)
+        self.charge_emb = CatProbEmbedding(num_charge_classes, d_each, gumbel_tau, gumbel_hard)
+        self.bond_emb = CatProbEmbedding(num_bond_types, d_each, gumbel_tau, gumbel_hard)
 
         # Fuse node pieces to hidden_dim
         self.fuse_nodes = nn.Linear(3 * d_each, hidden_dim)
@@ -216,19 +159,16 @@ class MoleculeGNN(nn.Module):
         self.edge_lift = nn.Linear(d_each, hidden_dim)
 
         # Stacks
-        if equivariant:
-            self.blocks = nn.ModuleList([EGNNBlock(hidden_dim, rbf_k=rbf_k) for _ in range(depth)])
-        else:
-            self.blocks = nn.ModuleList([EdgeAwareBlock(hidden_dim) for _ in range(depth)])
+        self.blocks = nn.ModuleList([EGNNBlock(hidden_dim, rbf_k=rbf_k) for _ in range(depth)])
 
         # Head
         self.head = nn.Linear(hidden_dim, 1)
         if self.property in ("dipole", "dipole_zero"):
             self.output = nn.Softplus()
             self.tau = 1.0
-        elif self.property == "score":
-            self.output = nn.Sigmoid()
-            self.tau = 2.0
+        # elif self.property == "score":
+        #     self.output = nn.Sigmoid()
+        #     self.tau = 2.0
         else:
             self.output = nn.Identity()
             self.tau = 1.0
@@ -240,11 +180,7 @@ class MoleculeGNN(nn.Module):
 
         a_h = self.atom_emb(A)
         c_h = self.charge_emb(C)
-        if self.equivariant:
-            # do not encode positions into features for equivariant path
-            x_h = torch.zeros_like(a_h)  # placeholder to keep dims consistent
-        else:
-            x_h = self.pos_enc(X)
+        x_h = torch.zeros_like(a_h)  # placeholder to keep dims consistent
 
         h0 = torch.cat([a_h, c_h, x_h], dim=-1)
         h0 = self.fuse_nodes(h0)
@@ -261,16 +197,10 @@ class MoleculeGNN(nn.Module):
             h = self.encode_nodes(g)               # (N, H)
             g.edata["e_emb"] = self.encode_edges(g)  # (E, H)
 
-            if self.equivariant:
-                x = g.ndata["x_t"]
-                for blk in self.blocks:
-                    h, x = blk(g, h, x)
-                g.ndata["h"] = h
-            else:
-                g.ndata["h"] = h
-                for blk in self.blocks:
-                    h = blk(g, g.ndata["h"])
-                    g.ndata["h"] = h
+            x = g.ndata["x_t"]
+            for blk in self.blocks:
+                h, x = blk(g, h, x)
+            g.ndata["h"] = h
 
             # Graph readout
             g.ndata["h_final"] = g.ndata["h"]
