@@ -290,6 +290,7 @@ class AugmentedReward:
             "grad_norm/reward": self.last_grad_norm_reward,
             "grad_norm/constraint": self.last_grad_norm_constraint,
             "grad_norm/penalty": self.last_grad_norm_penalty,
+            "grad_norm/percentage_penalty": (self.last_grad_norm_penalty / (self.last_grad_norm_full + 1e-10) if self.last_grad_norm_full is not None else 0.0),
         }
 
     def get_reward_constraint(self) -> dict:
