@@ -14,54 +14,41 @@ from finetuning.flow_adjoint_solver import LeanAdjointSolverFlow, step
 MAX_ALLOWED_ATOMS = 75  # upper bound for molecule size (can be upto 182 for GEOM)
 MIN_ALLOWED_ATOMS = 30  # lower bound for molecule size (can be as low as 3 for GEOM)
 
-class AMDataset(Dataset):
-    def __init__(self, solver_info):
-        # NOTE: T is the number of steps after the cutoff time
-        solver_info = self.detach_all(solver_info)
-        self.t = solver_info['t'] # (T,)
-        self.sigma_t = solver_info['sigma_t'] # (T,)
-        self.alpha = solver_info['alpha'] # (T,)
-        self.alpha_dot = solver_info['alpha_dot']# (T,)
-        self.traj_g = solver_info['traj_graph'] # list of dgl graphs (T,)
-        self.traj_adj = solver_info['traj_adj'] # list of dicts with {x, a, c, e} each (T,)
-        self.traj_v_base = solver_info['traj_v_pred'] # list of dicts with {x, a, c, e} each (T,)
 
-        self.T = self.t.size(0) # T = number of time steps
-        self.bs = 1 # len(self.traj_g[0].batch_num_nodes())
-        
-    def __len__(self):
-        return self.bs
+def check_and_get_atom_numbers(config: OmegaConf):
+    max_nodes = config.get("max_nodes", 210)
+    if config.sampling.n_atoms is not None:
+        if not isinstance(config.sampling.n_atoms, int):
+            raise ValueError(f"n_atoms must be a positive int, got {config.sampling.n_atoms}")
+        if config.sampling.n_atoms < MIN_ALLOWED_ATOMS or config.sampling.n_atoms > MAX_ALLOWED_ATOMS:
+            raise ValueError(f"n_atoms must be between {MIN_ALLOWED_ATOMS} and {MAX_ALLOWED_ATOMS}, got {config.sampling.n_atoms}")
+        if config.sampling.n_atoms * config.batch_size > max_nodes:
+            raise ValueError(f"n_atoms * batch_size = {config.sampling.n_atoms * config.batch_size} > max_nodes ({max_nodes}). Please decrease n_atoms or increase max_nodes.")
+    else:
+        n_atoms = None
 
-    def __getitem__(self, idx):
-        return {
-            't': self.t,
-            'sigma_t': self.sigma_t,
-            'alpha': self.alpha,
-            'alpha_dot': self.alpha_dot,
-            'traj_graph': self.traj_g,
-            'traj_adj': self.traj_adj,
-            'traj_v_base': self.traj_v_base,
-        }
-    
-    def detach_all(self, solver_info):
-        for key, value in solver_info.items():
-            if isinstance(value, torch.Tensor):
-                solver_info[key] = value.detach()
-            elif isinstance(value, list):
-                if isinstance(value[0], dgl.DGLGraph):
-                    for g in value:
-                        for k in g.ndata.keys():
-                            if isinstance(g.ndata[k], torch.Tensor):
-                                g.ndata[k] = g.ndata[k].detach()
-                        for k in g.edata.keys():
-                            if isinstance(g.edata[k], torch.Tensor):
-                                g.edata[k] = g.edata[k].detach()
-                if isinstance(value[0], dict):
-                    for dict_i in range(len(value)):
-                        for k, v in value[dict_i].items():
-                            if isinstance(v, torch.Tensor):
-                                value[dict_i][k] = v.detach()
-        return solver_info
+    if config.sampling.min_num_atoms is not None:
+        if not isinstance(config.sampling.min_num_atoms, int):
+            raise ValueError(f"min_num_atoms must be a positive int, got {config.sampling.min_num_atoms}")
+        if config.sampling.min_num_atoms < MIN_ALLOWED_ATOMS or config.sampling.min_num_atoms > MAX_ALLOWED_ATOMS:
+            raise ValueError(f"min_num_atoms must be between {MIN_ALLOWED_ATOMS} and {MAX_ALLOWED_ATOMS}, got {config.sampling.min_num_atoms}")
+        if config.sampling.min_num_atoms * config.batch_size > max_nodes:
+            raise ValueError(f"min_num_atoms * batch_size = {config.sampling.min_num_atoms * config.batch_size} > max_nodes ({max_nodes}). Please decrease min_num_atoms or increase max_nodes.")
+    else:
+        min_num_atoms = MIN_ALLOWED_ATOMS
+
+    if config.sampling.max_num_atoms is not None:
+        if not isinstance(config.sampling.max_num_atoms, int):
+            raise ValueError(f"max_num_atoms must be a positive int, got {config.sampling.max_num_atoms}")
+        if config.sampling.max_num_atoms < MIN_ALLOWED_ATOMS or config.sampling.max_num_atoms > MAX_ALLOWED_ATOMS:
+            raise ValueError(f"max_num_atoms must be between {MIN_ALLOWED_ATOMS} and {MAX_ALLOWED_ATOMS}, got {config.sampling.max_num_atoms}")
+    else:
+        max_num_atoms = MAX_ALLOWED_ATOMS
+
+    if config.sampling.max_num_atoms < config.sampling.min_num_atoms:
+        raise ValueError(f"max_num_atoms must be >= min_num_atoms, got min_num_atoms={config.sampling.min_num_atoms}, max_num_atoms={config.sampling.max_num_atoms}")
+
+    return max_nodes, n_atoms, min_num_atoms, max_num_atoms
 
 
 def create_timestep_subset(
@@ -114,6 +101,55 @@ def create_timestep_subset(
 
     # Sort the idx before returning
     return np.sort(combined_samples)
+
+class AMDataset(Dataset):
+    def __init__(self, solver_info):
+        # NOTE: T is the number of steps after the cutoff time
+        solver_info = self.detach_all(solver_info)
+        self.t = solver_info['t'] # (T,)
+        self.sigma_t = solver_info['sigma_t'] # (T,)
+        self.alpha = solver_info['alpha'] # (T,)
+        self.alpha_dot = solver_info['alpha_dot']# (T,)
+        self.traj_g = solver_info['traj_graph'] # list of dgl graphs (T,)
+        self.traj_adj = solver_info['traj_adj'] # list of dicts with {x, a, c, e} each (T,)
+        self.traj_v_base = solver_info['traj_v_pred'] # list of dicts with {x, a, c, e} each (T,)
+
+        self.T = self.t.size(0) # T = number of time steps
+        self.bs = 1 # len(self.traj_g[0].batch_num_nodes())
+        
+    def __len__(self):
+        return self.bs
+
+    def __getitem__(self, idx):
+        return {
+            't': self.t,
+            'sigma_t': self.sigma_t,
+            'alpha': self.alpha,
+            'alpha_dot': self.alpha_dot,
+            'traj_graph': self.traj_g,
+            'traj_adj': self.traj_adj,
+            'traj_v_base': self.traj_v_base,
+        }
+    
+    def detach_all(self, solver_info):
+        for key, value in solver_info.items():
+            if isinstance(value, torch.Tensor):
+                solver_info[key] = value.detach()
+            elif isinstance(value, list):
+                if isinstance(value[0], dgl.DGLGraph):
+                    for g in value:
+                        for k in g.ndata.keys():
+                            if isinstance(g.ndata[k], torch.Tensor):
+                                g.ndata[k] = g.ndata[k].detach()
+                        for k in g.edata.keys():
+                            if isinstance(g.edata[k], torch.Tensor):
+                                g.edata[k] = g.edata[k].detach()
+                if isinstance(value[0], dict):
+                    for dict_i in range(len(value)):
+                        for k, v in value[dict_i].items():
+                            if isinstance(v, torch.Tensor):
+                                value[dict_i][k] = v.detach()
+        return solver_info
 
 
 #### LOSS ####
@@ -206,38 +242,13 @@ class AdjointMatchingFinetuningTrainerFlowMol:
         self.verbose = verbose
 
         # Nodes limit
-        self.max_nodes = config.get("max_nodes", 210)
-        if self.sampling_config.n_atoms is not None:
-            if not isinstance(self.sampling_config.n_atoms, int):
-                raise ValueError(f"n_atoms must be a positive int, got {self.sampling_config.n_atoms}")
-            if self.sampling_config.n_atoms < MIN_ALLOWED_ATOMS or self.sampling_config.n_atoms > MAX_ALLOWED_ATOMS:
-                raise ValueError(f"n_atoms must be between {MIN_ALLOWED_ATOMS} and {MAX_ALLOWED_ATOMS}, got {self.sampling_config.n_atoms}")        
-            if self.sampling_config.n_atoms * self.config.batch_size > self.max_nodes:
-                raise ValueError(f"n_atoms * batch_size = {self.sampling_config.n_atoms * self.config.batch_size} > max_nodes ({self.max_nodes}). Please decrease n_atoms or increase max_nodes.")
-        else:
-            self.sampling_config.n_atoms = None
-
-        if self.sampling_config.min_num_atoms is not None:
-            if not isinstance(self.sampling_config.min_num_atoms, int):
-                raise ValueError(f"min_num_atoms must be a positive int, got {self.sampling_config.min_num_atoms}")
-            if self.sampling_config.min_num_atoms < MIN_ALLOWED_ATOMS or self.sampling_config.min_num_atoms > MAX_ALLOWED_ATOMS:
-                raise ValueError(f"min_num_atoms must be between {MIN_ALLOWED_ATOMS} and {MAX_ALLOWED_ATOMS}, got {self.sampling_config.min_num_atoms}")
-            if self.sampling_config.min_num_atoms * self.config.batch_size > self.max_nodes:
-                raise ValueError(f"min_num_atoms * batch_size = {self.sampling_config.min_num_atoms * self.config.batch_size} > max_nodes ({self.max_nodes}). Please decrease min_num_atoms or increase max_nodes.")
-        else:
-            self.sampling_config.min_num_atoms = MIN_ALLOWED_ATOMS
-            
-        if self.sampling_config.max_num_atoms is not None:
-            if not isinstance(self.sampling_config.max_num_atoms, int):
-                raise ValueError(f"max_num_atoms must be a positive int, got {self.sampling_config.max_num_atoms}")
-            if self.sampling_config.max_num_atoms < MIN_ALLOWED_ATOMS or self.sampling_config.max_num_atoms > MAX_ALLOWED_ATOMS:
-                raise ValueError(f"max_num_atoms must be between {MIN_ALLOWED_ATOMS} and {MAX_ALLOWED_ATOMS}, got {self.sampling_config.max_num_atoms}")
-        else:
-            self.sampling_config.max_num_atoms = MAX_ALLOWED_ATOMS
+        (
+            self.max_nodes,
+            self.sampling_config.n_atoms,
+            self.sampling_config.min_num_atoms,
+            self.sampling_config.max_num_atoms,
+        ) = check_and_get_atom_numbers(config)
         
-        if self.sampling_config.max_num_atoms < self.sampling_config.min_num_atoms:
-            raise ValueError(f"max_num_atoms must be >= min_num_atoms, got min_num_atoms={self.sampling_config.min_num_atoms}, max_num_atoms={self.sampling_config.max_num_atoms}")
-
         # Reward_lambda and LCT and clip_grad_norm
         reward_lambda = config.get("reward_lambda", 1.0)
         lct = config.get("lct", None)
@@ -419,7 +430,7 @@ class AdjointMatchingFinetuningTrainerFlowMol:
                 v_fine=v_fine,
                 adj=adj,
                 sigma=sigma,
-                LCT=self.LCT
+                LCT=self.LCT,
             )
         else:
             loss = adj_matching_loss_list_of_dicts(
