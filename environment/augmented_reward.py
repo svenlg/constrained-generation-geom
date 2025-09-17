@@ -79,7 +79,7 @@ class AugmentedReward:
         """
         tmp_lambda = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.lambda_
         tmp_rho = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.rho_
-        tmp_bound = torch.ones_like(self.tmp_constraint) * self.bound()
+        tmp_bound = torch.ones_like(self.tmp_constraint) * self.bound
         g = self.tmp_constraint - tmp_bound - tmp_lambda / tmp_rho
         return (tmp_rho * torch.clamp(g, min=0.0)).mean()
 
@@ -111,7 +111,7 @@ class AugmentedReward:
         """mean((rho/2)*relu(g)^2), with g in units matching constraint mode."""
         tmp_lambda = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.lambda_
         tmp_rho = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.rho_
-        tmp_bound = torch.ones_like(self.tmp_constraint) * self.bound()
+        tmp_bound = torch.ones_like(self.tmp_constraint) * self.bound
         g = self.tmp_constraint - tmp_bound - tmp_lambda / tmp_rho
         relu_g = torch.clamp(g, min=0.0)
         return ((tmp_rho / 2.0) * (relu_g ** 2)).mean()
@@ -166,7 +166,7 @@ class AugmentedReward:
         # --- augmented Lagrangian pieces ---
         tmp_lambda = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.lambda_
         tmp_rho = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.rho_
-        tmp_bound = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.bound()
+        tmp_bound = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.bound
 
         g = self.tmp_constraint - tmp_bound - tmp_lambda / tmp_rho  # in chosen units
         self.tmp_total = ( self.tmp_reward - (tmp_rho / 2.0) * torch.clamp(g, min=0.0) ** 2 ).mean()
