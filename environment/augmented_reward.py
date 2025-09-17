@@ -282,7 +282,7 @@ class AugmentedReward:
         logit_mean = self.tmp_constraint_logits.clone().detach().mean().cpu().item()
         return {
             "reward": reward_mean,
-            "constraint_prob": mean_prob,
+            "constraint": mean_prob,
             "constraint_logit": logit_mean,
             "total_reward": total_reward,
             "constraint_violations": violations,
@@ -295,11 +295,11 @@ class AugmentedReward:
 
     def get_reward_constraint(self) -> dict:
         reward = self.tmp_reward.clone().detach().cpu().numpy()
-        prob   = self.tmp_constraint_prob.clone().detach().cpu().numpy()
-        logit  = self.tmp_constraint_logits.clone().detach().cpu().numpy()
+        prob = self.tmp_constraint_prob.clone().detach().cpu().numpy()
+        logit = self.tmp_constraint_logits.clone().detach().cpu().numpy()
         return {
             "reward": reward,
-            "constraint_prob": prob,
+            "constraint": prob,
             "constraint_logit": logit,
         }
 
