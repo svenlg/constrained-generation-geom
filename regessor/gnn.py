@@ -30,7 +30,7 @@ class GNN(nn.Module):
             self.output = nn.Identity()
             self.tau = 1.0
 
-    def forward(self, g: dgl.DGLGraph) -> Tensor:
+    def forward(self, g: dgl.DGLGraph, return_logits: bool = False) -> Tensor:
         with g.local_scope():
             h = torch.cat([
                 g.ndata["a_t"],
@@ -53,8 +53,10 @@ class GNN(nn.Module):
 
             g.ndata["h"] = h
             h = dgl.readout_nodes(g, "h", op="mean")
-            return self.output(self.head(h) / self.tau)
-
+            out = self.head(h) / self.tau
+            if return_logits:
+                return out
+            return self.output(out)
 
 
 class ResBlock(nn.Module):
