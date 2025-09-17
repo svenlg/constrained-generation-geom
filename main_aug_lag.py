@@ -380,10 +380,6 @@ def main():
         full_stats.extend(am_stats)
 
         gen_model = copy.deepcopy(trainer.fine_model)
-        if False and args.save_model and (k % 5 == 0) and k != lagrangian_updates:
-            save_path.mkdir(parents=True, exist_ok=True)
-            torch.save(gen_model.cpu().state_dict(), save_path / Path(f"model_{k}.pth"))
-            print(f"Model saved to {save_path}", flush=True)
 
         # Print final statistics
         if full_stats[-1]["constraint"] < al_lowest_const:
