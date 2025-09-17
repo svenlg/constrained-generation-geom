@@ -23,9 +23,9 @@ class GNN(nn.Module):
         if self.property in ("dipole", "dipole_zero"):
             self.output = nn.Softplus() # dipole is non-negative
             self.tau = 1.0
-        # elif self.property == "score": # score is between 0 and 1
-        #     self.output = nn.Sigmoid()
-        #     self.tau = 2.0
+        elif self.property == "score": # score is between 0 and 1
+            self.output = nn.Sigmoid()
+            self.tau = 2.0
         else:
             self.output = nn.Identity()
             self.tau = 1.0
@@ -55,10 +55,6 @@ class GNN(nn.Module):
             h = dgl.readout_nodes(g, "h", op="mean")
             return self.output(self.head(h) / self.tau)
 
-    def score(self, g: dgl.DGLGraph) -> torch.Tensor:
-        score_logit = self(g)
-        p = torch.sigmoid(score_logit)
-        return p.detach()
 
 
 class ResBlock(nn.Module):

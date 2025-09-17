@@ -164,9 +164,9 @@ class MoleculeGNN(nn.Module):
         if self.property in ("dipole", "dipole_zero"):
             self.output = nn.Softplus()
             self.tau = 1.0
-        # elif self.property == "score":
-        #     self.output = nn.Sigmoid()
-        #     self.tau = 2.0
+        elif self.property == "score":
+            self.output = nn.Sigmoid()
+            self.tau = 2.0
         else:
             self.output = nn.Identity()
             self.tau = 1.0
