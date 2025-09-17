@@ -212,7 +212,5 @@ def finetune(
         targets=targets,
         steps=200 if config is None else config.get("steps", 200),
         batch_size=32 if config is None else config.get("batch_size", 32),
-        num_workers=0 if config is None else config.get("num_workers", 0),
-        log_interval=20 if config is None else config.get("log_interval", 20),
-    )
+        num_workers=0 if config is None else config.get("num_workers", 0),    )
     return history
