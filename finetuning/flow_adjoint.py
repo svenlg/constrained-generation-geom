@@ -24,6 +24,7 @@ def check_and_get_atom_numbers(config: OmegaConf):
             raise ValueError(f"n_atoms must be between {MIN_ALLOWED_ATOMS} and {MAX_ALLOWED_ATOMS}, got {config.sampling.n_atoms}")
         if config.sampling.n_atoms * config.batch_size > max_nodes:
             raise ValueError(f"n_atoms * batch_size = {config.sampling.n_atoms * config.batch_size} > max_nodes ({max_nodes}). Please decrease n_atoms or increase max_nodes.")
+        n_atoms = config.sampling.n_atoms
     else:
         n_atoms = None
 
@@ -34,6 +35,7 @@ def check_and_get_atom_numbers(config: OmegaConf):
             raise ValueError(f"min_num_atoms must be between {MIN_ALLOWED_ATOMS} and {MAX_ALLOWED_ATOMS}, got {config.sampling.min_num_atoms}")
         if config.sampling.min_num_atoms * config.batch_size > max_nodes:
             raise ValueError(f"min_num_atoms * batch_size = {config.sampling.min_num_atoms * config.batch_size} > max_nodes ({max_nodes}). Please decrease min_num_atoms or increase max_nodes.")
+        min_num_atoms = config.sampling.min_num_atoms if n_atoms is None else None
     else:
         min_num_atoms = MIN_ALLOWED_ATOMS
 
@@ -42,10 +44,11 @@ def check_and_get_atom_numbers(config: OmegaConf):
             raise ValueError(f"max_num_atoms must be a positive int, got {config.sampling.max_num_atoms}")
         if config.sampling.max_num_atoms < MIN_ALLOWED_ATOMS or config.sampling.max_num_atoms > MAX_ALLOWED_ATOMS:
             raise ValueError(f"max_num_atoms must be between {MIN_ALLOWED_ATOMS} and {MAX_ALLOWED_ATOMS}, got {config.sampling.max_num_atoms}")
+        max_num_atoms = config.sampling.max_num_atoms if n_atoms is None else None
     else:
         max_num_atoms = MAX_ALLOWED_ATOMS
 
-    if config.sampling.max_num_atoms < config.sampling.min_num_atoms:
+    if max_num_atoms < min_num_atoms:
         raise ValueError(f"max_num_atoms must be >= min_num_atoms, got min_num_atoms={config.sampling.min_num_atoms}, max_num_atoms={config.sampling.max_num_atoms}")
 
     return max_nodes, n_atoms, min_num_atoms, max_num_atoms
@@ -197,9 +200,7 @@ def sampling(
     model: flowmol.FlowMol,
     device: torch.device,
 ):
-
     model.to(device)
-
     n_atoms_provided = config.n_atoms is not None
 
     # --- Mode 1: fixed-size sampling if n_atoms is specified ---
@@ -365,15 +366,6 @@ class AdjointMatchingFinetuningTrainerFlowMol:
         """Training step."""
 
         sample = self.push_to_device(sample)
-        # ts = sample['t'].to(self.device)
-        # sigmas = sample['sigma_t'].to(self.device)
-        # alpha = sample['alpha'].to(self.device)
-        # alpha_dot = sample['alpha_dot'].to(self.device)
-        # traj_g = [g.to(self.device) for g in sample['traj_graph']]
-        # traj_adj = sample['traj_adj'].to(self.device)
-        # # traj_x = sample['traj_x'].to(self.device)
-        # traj_v_base = sample['traj_v_base'].to(self.device)
-        # # row_mask = sample['row_mask'].to(self.device)
         ts = sample['t']
         sigmas = sample['sigma_t']
         alpha = sample['alpha']

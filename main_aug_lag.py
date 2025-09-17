@@ -341,10 +341,9 @@ def main():
                 if am_stats[-1]["total_reward"] > am_best_total_reward:
                     am_best_total_reward = am_stats[-1]["total_reward"]
                     am_best_iteration = i
-                tmp_log["total_best_reward"] = am_best_total_reward
-
+                tmp_log["total_best_reward"] = am_best_total_reward                
+                
                 if rc_fine_tune_freq > 0 and (i % rc_fine_tune_freq == 0):
-
                     if config.reward.fine_tuning:
                         r_history = finetune(
                             finetuner = reward_finetuner,
