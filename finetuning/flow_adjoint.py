@@ -116,6 +116,9 @@ def create_timestep_subset(
     return np.sort(combined_samples)
 
 
+#### LOSS ####
+loss_weights = {'a': 0.4, 'c': 1.0, 'e': 2.0, 'x': 3.0}
+
 def adj_matching_loss(v_base, v_fine, adj, sigma):
     """Adjoint matching loss for FM"""
     diff = v_fine - v_base
@@ -126,12 +129,6 @@ def adj_matching_loss(v_base, v_fine, adj, sigma):
     loss = torch.mean(term_difference)
     return loss 
 
-loss_weights = {
-    'a': 0.4,
-    'c': 1.0,
-    'e': 2.0,
-    'x': 3.0
-}
 def adj_matching_loss_list_of_dicts(v_base, v_fine, adj, sigma):
     """Adjoint matching loss for FM"""
     loss = 0.0
@@ -144,7 +141,20 @@ def adj_matching_loss_list_of_dicts(v_base, v_fine, adj, sigma):
         loss += torch.mean(term_difference) * loss_weights[feat]
     return loss
 
+def adj_matching_loss_list_of_dicts_lct(v_base, v_fine, adj, sigma, LCT:float=None):
+    """Adjoint matching loss for FM"""
+    eps = 1e-12
+    loss = 0.0
+    for i, feat in enumerate(['x', 'a', 'c', 'e']):
+        diff = v_fine[feat] - v_base[feat]                  # [T, ..., ...]
+        sig = sigma[:, i].view(-1, 1, 1)                    # [T,1,1]
+        term = (2.0 / (sig + eps)) * diff + sig * adj[feat] # [T, ..., ...]
+        per_t = (term ** 2).sum(dim=[1, 2])                 # [T]
+        clipped = torch.clamp(per_t, max=LCT)               # [T]
+        loss = loss + clipped.mean() * loss_weights[feat]
+    return loss
 
+#### SAMPLING ####
 def sampling(
     config: OmegaConf,
     batch_size: int,
@@ -228,9 +238,11 @@ class AdjointMatchingFinetuningTrainerFlowMol:
         if self.sampling_config.max_num_atoms < self.sampling_config.min_num_atoms:
             raise ValueError(f"max_num_atoms must be >= min_num_atoms, got min_num_atoms={self.sampling_config.min_num_atoms}, max_num_atoms={self.sampling_config.max_num_atoms}")
 
-        # Clip
-        self.clip_grad_norm = config.get("clip_grad_norm", 1e5)
-        self.clip_loss = config.get("clip_loss", 0.5)
+        # Reward_lambda and LCT and clip_grad_norm
+        reward_lambda = config.get("reward_lambda", 1.0)
+        lct = config.get("lct", None)
+        self.LCT = lct * reward_lambda**2 if lct is not None and lct > 0.0 else None
+        self.clip_grad_norm = config.get("clip_grad_norm", 1.0)
 
         # Models
         self.fine_model = model
@@ -394,40 +406,40 @@ class AdjointMatchingFinetuningTrainerFlowMol:
             sigma.append(sigma_t)
         
         assert len(v_base) == len(v_fine) == len(adj) == len(sigma)
-        # stack each list of dicts to a dict of feature tensors
 
+        # stack each list of dicts to a dict of feature tensors
         v_base = {feat: torch.stack([v_base[i][feat] for i in range(len(v_base))], dim=0) for feat in ['x', 'a', 'c', 'e']}
         v_fine = {feat: torch.stack([v_fine[i][feat] for i in range(len(v_fine))], dim=0) for feat in ['x', 'a', 'c', 'e']}
         adj = {feat: torch.stack([adj[i][feat] for i in range(len(adj))], dim=0) for feat in ['x', 'a', 'c', 'e']}
         sigma = torch.stack(sigma, dim=0)
 
-        loss = adj_matching_loss_list_of_dicts(
-            v_base=v_base,
-            v_fine=v_fine,
-            adj=adj,
-            sigma=sigma,
-        )
-
+        if self.LCT is not None and self.LCT > 0.0:
+            loss = adj_matching_loss_list_of_dicts_lct(
+                v_base=v_base,
+                v_fine=v_fine,
+                adj=adj,
+                sigma=sigma,
+                LCT=self.LCT
+            )
+        else:
+            loss = adj_matching_loss_list_of_dicts(
+                v_base=v_base,
+                v_fine=v_fine,
+                adj=adj,
+                sigma=sigma,
+            )
+        
         if loss.isnan().any():
             return torch.tensor(float("inf"), device=self.device)
         
+        if self.LCT is None or self.LCT <= 0.0:
+            loss = torch.clamp(loss, min=0.0, max=1e5)
+        
         # step optimizer
         self.optimizer.zero_grad()
-
+        
         # self.fine_model.zero_grad()
         loss.backward(retain_graph=False)
-
-        # loss clapping
-        if self.clip_loss > 0.0:
-            loss = torch.clamp(loss, min=0.0, max=self.clip_loss)
-
-        # if self.verbose and self.config.clip_grad_norm > 0.0:
-        #     total_norm = 0
-        #     for p in self.fine_model.parameters():
-        #         param_norm = p.grad.detach().data.norm(2)
-        #         total_norm += param_norm.item() ** 2
-        #     total_norm = total_norm ** 0.5
-        #     print(f"Before Clipping Norm: {total_norm:.6f}")
 
         if self.clip_grad_norm > 0.0:
             torch.nn.utils.clip_grad_norm_(self.fine_model.parameters(), self.clip_grad_norm)
@@ -464,3 +476,4 @@ class AdjointMatchingFinetuningTrainerFlowMol:
 
         del dataset
         return total_loss / c
+

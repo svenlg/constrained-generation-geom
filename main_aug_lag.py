@@ -118,6 +118,7 @@ def main():
 
     # Adjoint Matching Parameters
     reward_lambda = config.reward_lambda
+    config.adjoint_matching.reward_lambda = reward_lambda
     traj_len = config.adjoint_matching.sampling.num_integration_steps
     finetune_steps = config.adjoint_matching.sampling.num_samples // config.adjoint_matching.batch_size
 
@@ -181,7 +182,7 @@ def main():
     print(f"\treward_lambda: {reward_lambda}", flush=True)
     print(f"\tlr: {config.adjoint_matching.lr}", flush=True)
     print(f"\tclip_grad_norm: {config.adjoint_matching.clip_grad_norm}", flush=True)
-    print(f"\tclip_loss: {config.adjoint_matching.clip_loss}", flush=True)
+    print(f"\tlct: {config.adjoint_matching.lct}", flush=True)
     print(f"\tbatch_size: {config.adjoint_matching.batch_size}", flush=True)
     print(f"\tsampling.num_samples: {config.adjoint_matching.sampling.num_samples}", flush=True)
     print(f"\tsampling.num_integration_steps: {config.adjoint_matching.sampling.num_integration_steps}", flush=True)

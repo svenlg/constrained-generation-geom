@@ -31,8 +31,7 @@ def parse_args():
                     help="If set, assert each run has this many rows/files")
     return ap.parse_args()
 
-def main():
-    args = parse_args()
+def main(args):
     copy_mode = not args.move  # default is copy
 
     src_dirs: List[Path] = sorted(Path(".").glob(args.sources), key=natural_key)
@@ -136,4 +135,4 @@ def main():
     print(f"Destination molecules dir: {dest_mols}")
 
 if __name__ == "__main__":
-    main()
+    main(parse_args())
