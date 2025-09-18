@@ -84,7 +84,7 @@ def main():
     use_wandb = args.use_wandb and not args.debug
     run_id = datetime.now().strftime("%m%d_%H%M")
     if config.experiment is not None and "sweep" in config.experiment:
-        run_name = f"rl{config.reward_lambda}_rho{config.augmented_lagrangian.rho_init}_lu{config.augmented_lagrangian.lagrangian_updates}_seed{config.seed}"
+        run_name = f"lu{config.augmented_lagrangian.lagrangian_updates}_rl{config.reward_lambda}_rho{config.augmented_lagrangian.rho_init}_seed{config.seed}"
     elif config.experiment is not None:
         run_name = f"{run_id}_{config.experiment}"
     else:
