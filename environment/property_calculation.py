@@ -4,7 +4,7 @@ from torch_geometric.data import Data
 
 import dxtb
 from rdkit import Chem
-from dxtb.calculators import GFN1Calculator
+from dxtb.calculators import GFN1Calculator, GFN2Calculator
 from dxtb.components.field import ElectricField
 
 dxtb.timer.disable()

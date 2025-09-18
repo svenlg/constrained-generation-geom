@@ -1,7 +1,7 @@
 import argparse
 from omegaconf import OmegaConf
 
-def parse_args():
+def parse_arguments():
     parser = argparse.ArgumentParser(description="Run ALM with optional parameter overrides")
     # Settings
     parser.add_argument("--debug", action='store_true')

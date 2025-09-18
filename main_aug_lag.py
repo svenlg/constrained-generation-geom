@@ -13,7 +13,7 @@ from pathlib import Path
 from datetime import datetime
 from omegaconf import OmegaConf
 
-from utils import parse_args, update_config_with_args, set_seed, sampling
+from utils import parse_arguments, update_config_with_args, set_seed, sampling
 from true_rc import pred_vs_real
 from regessor import setup_fine_tuner, finetune
 
@@ -67,7 +67,7 @@ def load_regressor(config: OmegaConf, device: torch.device) -> nn.Module:
 
 def main():
     # Parse command line arguments
-    args = parse_args()
+    args = parse_arguments()
 
     # Load config from file
     config_path = Path("configs/augmented_lagrangian.yaml")
@@ -109,6 +109,7 @@ def main():
     n_atoms = config.get("n_atoms", None)
     min_num_atoms = config.get("min_num_atoms", None)
     max_num_atoms = config.get("max_num_atoms", None)
+
     # update config.adjoint_matching.sampling
     config.adjoint_matching.sampling.n_atoms = n_atoms
     config.adjoint_matching.sampling.min_num_atoms = min_num_atoms
@@ -254,6 +255,7 @@ def main():
     _ = augmented_reward(dgl_mols)
     tmp_log = augmented_reward.get_statistics()
     full_stats.append(tmp_log)
+    
     # Compare with true value
     pred_rc = augmented_reward.get_reward_constraint()
     log_pred_vs_real, _, _ = pred_vs_real(rd_mols, pred_rc, reward=config.reward.fn, constraint=config.constraint.fn)

@@ -206,7 +206,7 @@ class EndpointVectorField(nn.Module):
                         x_diff, d = self.precompute_distances(g, node_positions)
 
                         edge_features = self.edge_updaters[updater_idx](g, node_scalar_features, edge_features, d=d)
-
+            
             # predict final charges and atom type logits
             node_scalar_features = self.node_output_head(node_scalar_features)
             atom_type_logits = node_scalar_features[:, :self.n_atom_types]
@@ -310,8 +310,8 @@ class EndpointVectorField(nn.Module):
 
         if keep_intermediate_graphs:
             # create a list to store the intermediate graphs
-            intermediate_graphs = [prepair_graph(g, upper_edge_mask)]
-        
+            intermediate_graphs = [prepare_graph(g, upper_edge_mask)]
+
         for s_idx in range(1,t.shape[0]):
 
             # get the next time-point (s) and the current time-point (t)
@@ -354,7 +354,7 @@ class EndpointVectorField(nn.Module):
                     traj_frames[ep_key].append(ep_frame)
             
             if keep_intermediate_graphs:
-                intermediate_graphs.append(prepair_graph(g, upper_edge_mask))
+                intermediate_graphs.append(prepare_graph(g, upper_edge_mask))
 
         # set x_1 = x_t
         for feat in self.canonical_feat_order:
@@ -368,7 +368,7 @@ class EndpointVectorField(nn.Module):
 
         if keep_intermediate_graphs:
             # return the intermediate graphs
-            g = prepair_graph(g, upper_edge_mask)
+            g = prepare_graph(g, upper_edge_mask)
             return g, intermediate_graphs
 
         if visualize:
@@ -777,7 +777,7 @@ class EdgeUpdate(nn.Module):
         return edge_feats
 
 
-def prepair_graph(g: dgl.DGLGraph, upper_edge_mask) -> dgl.DGLGraph:
+def prepare_graph(g: dgl.DGLGraph, upper_edge_mask) -> dgl.DGLGraph:
     """Prepare the graph for adjoint matching to a new device."""
     # We just need need:
     # 1. the edges
