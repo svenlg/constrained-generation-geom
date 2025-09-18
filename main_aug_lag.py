@@ -13,7 +13,6 @@ from pathlib import Path
 from datetime import datetime
 from omegaconf import OmegaConf
 
-
 from utils import parse_args, update_config_with_args, set_seed, sampling
 from true_rc import pred_vs_real
 from regessor import setup_fine_tuner, finetune
@@ -21,7 +20,7 @@ from regessor import setup_fine_tuner, finetune
 import dgl
 import flowmol
 
-from environment import AugmentedReward, geometry_constraint
+from environment import AugmentedReward, wrapped_geometry_constraint
 
 from finetuning import AugmentedLagrangian, AdjointMatchingFinetuningTrainerFlowMol
 
@@ -144,9 +143,11 @@ def main():
 
     # Setup - Constraint Functions
     if config.constraint.fn == "geometry":
-        constraint_model = geometry_constraint
+        constraint_model = wrapped_geometry_constraint(config.constraint)
+        constrain_geq_bound = True if config.constraint.get("reduction", "min") not in ["relu", "relu_mean"] else False
+        if not constrain_geq_bound: # we have relu - bound is handled in constraint function
+            config.constraint.bound = 0.0
         config.constraint.fine_tuning = False
-        constrain_geq_bound = True
     elif config.constraint.fn == "score":
         constraint_model, constraint_model_config = load_regressor(config.constraint, device=device)
         constrain_geq_bound = False
@@ -156,10 +157,10 @@ def main():
     rc_fine_tune_freq = config.rc_finetune.freq if config.reward.fine_tuning or config.constraint.fine_tuning else 0
 
     if args.debug:
-        config.augmented_lagrangian.sampling.num_samples = config.augmented_lagrangian.sampling.num_samples if torch.cuda.is_available() else 8
+        config.augmented_lagrangian.sampling.num_samples = 8
         config.adjoint_matching.sampling.num_samples = 20 if torch.cuda.is_available() else 4
         config.adjoint_matching.batch_size = 5 if torch.cuda.is_available() else 2
-        config.reward_sampling.num_samples = config.reward_sampling.num_samples if torch.cuda.is_available() else 8
+        config.reward_sampling.num_samples = 8
         finetune_steps = config.adjoint_matching.sampling.num_samples // config.adjoint_matching.batch_size
         plotting_freq = 1
         args.save_samples = False

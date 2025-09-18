@@ -48,9 +48,6 @@ def check_and_get_atom_numbers(config: OmegaConf):
     else:
         max_num_atoms = MAX_ALLOWED_ATOMS
 
-    if max_num_atoms < min_num_atoms:
-        raise ValueError(f"max_num_atoms must be >= min_num_atoms, got min_num_atoms={config.sampling.min_num_atoms}, max_num_atoms={config.sampling.max_num_atoms}")
-
     return max_nodes, n_atoms, min_num_atoms, max_num_atoms
 
 
