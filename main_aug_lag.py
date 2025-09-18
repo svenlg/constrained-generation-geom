@@ -21,7 +21,7 @@ from regessor import setup_fine_tuner, finetune
 import dgl
 import flowmol
 
-from environment import AugmentedReward
+from environment import AugmentedReward, geometry_constraint
 
 from finetuning import AugmentedLagrangian, AdjointMatchingFinetuningTrainerFlowMol
 
@@ -137,13 +137,22 @@ def main():
     base_model = setup_gen_model(config.flow_model, device=device)
     gen_model = copy.deepcopy(base_model)
 
-    # Setup - Reward and Constraint Functions
+    # Setup - Reward Functions
     reward_model, reward_model_config = load_regressor(config.reward, device=device)
     if config.rc_finetune is not None and config.reward.fine_tuning:
         reward_finetuner = setup_fine_tuner(config.reward.fn, reward_model, config.rc_finetune)
-    constraint_model, constraint_model_config = load_regressor(config.constraint, device=device)
-    if config.rc_finetune is not None and config.constraint.fine_tuning:
-        constraint_finetuner = setup_fine_tuner(config.constraint.fn, constraint_model, config.rc_finetune)
+
+    # Setup - Constraint Functions
+    if config.constraint.fn == "geometry":
+        constraint_model = geometry_constraint
+        config.constraint.fine_tuning = False
+        constrain_geq_bound = True
+    elif config.constraint.fn == "score":
+        constraint_model, constraint_model_config = load_regressor(config.constraint, device=device)
+        constrain_geq_bound = False
+        if config.rc_finetune is not None and config.constraint.fine_tuning:
+            constraint_finetuner = setup_fine_tuner(config.constraint.fn, constraint_model, config.rc_finetune)
+
     rc_fine_tune_freq = config.rc_finetune.freq if config.reward.fine_tuning or config.constraint.fine_tuning else 0
 
     if args.debug:
@@ -156,7 +165,7 @@ def main():
         args.save_samples = False
         num_iterations = 2
         lagrangian_updates = 2
-        rc_fine_tune_freq = 1
+        rc_fine_tune_freq = 0
         print("Debug mode activated", flush=True)
 
     print(f"--- Start ---", flush=True)
@@ -200,6 +209,7 @@ def main():
         constraint_fn = constraint_model,
         alpha = reward_lambda,
         bound = config.constraint.bound,
+        geq = constrain_geq_bound,
         config = config.augmented_reward,
         device = device,
     )
@@ -252,6 +262,7 @@ def main():
         config = config.augmented_lagrangian,
         constraint_fn = constraint_model,
         bound = config.constraint.bound,
+        geq = constrain_geq_bound,
         device = device,
     )
     # Set initial expected constraint (only needed for logging)
@@ -414,7 +425,8 @@ def main():
         config_save_path.mkdir(parents=True, exist_ok=True)
         OmegaConf.save(config, config_save_path / Path("config.yaml"))
         OmegaConf.save(reward_model_config, config_save_path / Path("reward_model_config.yaml"))
-        OmegaConf.save(constraint_model_config, config_save_path / Path("constraint_model_config.yaml"))
+        if config.constraint.fn == "score":
+            OmegaConf.save(constraint_model_config, config_save_path / Path("constraint_model_config.yaml"))
         full_stats[0]['loss'] = full_stats[1]['loss']
         df_al = pd.DataFrame.from_records(full_stats)
         df_al.to_csv(save_path / "full_stats.csv", index=False)
