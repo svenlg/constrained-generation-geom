@@ -83,7 +83,9 @@ def main():
     # Setup - WandB
     use_wandb = args.use_wandb and not args.debug
     run_id = datetime.now().strftime("%m%d_%H%M")
-    if config.experiment is not None:
+    if config.experiment is not None and "sweep" in config.experiment:
+        run_name = config.experiment
+    elif config.experiment is not None:
         run_name = f"{run_id}_{config.experiment}"
     else:
         run_name = f"{run_id}_r{config.reward.model_type}_c{config.constraint.model_type}{config.constraint.bound}_rf{config.reward_lambda}_lu{config.augmented_lagrangian.lagrangian_updates}"
@@ -96,7 +98,7 @@ def main():
 
     save_path = Path(config.root) / Path("aa_experiments")
     if use_wandb and sweep_id is not None:
-        save_path = save_path / Path(f"{sweep_id}") /Path(f"{wandb.run.id}")
+        save_path = save_path / Path(f"{config.experiment}") / Path(f"{wandb.run.id}")
     if (args.save_samples or args.save_model or args.save_plots) and not args.debug:
         save_path = save_path / Path(run_name)
         save_path.mkdir(parents=True, exist_ok=True)

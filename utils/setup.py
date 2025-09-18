@@ -29,15 +29,18 @@ def parse_args():
                         help="Override reward in config")
     parser.add_argument("--bound", type=float,
                         help="Override bound in config")
+    # General Parameters
+    parser.add_argument("--total_steps", type=int,
+                        help="Total number of AM steps")
     # Augmented Lagrangian Parameters
+    parser.add_argument("--lagrangian_updates", type=int,
+                        help="Override lagrangian_updates in config")
     parser.add_argument("--rho_init", type=float,
                         help="Override rho_init in config")
     parser.add_argument("--rho_max", type=float,
                         help="Override rho_max in config")
     parser.add_argument("--eta", type=float,
                         help="Override eta in config")
-    parser.add_argument("--lagrangian_updates", type=int,
-                        help="Override lagrangian_updates in config")
     parser.add_argument("--update_base_model", type=bool,
                         help="Override update_base_model in config, default: true")
     parser.add_argument("--baseline", action='store_true',
@@ -51,6 +54,8 @@ def parse_args():
                         help="Override adjoint_matching.lr in config")
     parser.add_argument("--clip_grad_norm",  type=float,
                         help="Override adjoint_matching.clip_grad_norm in config")
+    parser.add_argument("--lct",  type=float,
+                        help="Override adjoint_matching.lct in config")
     parser.add_argument("--clip_loss",  type=float,
                         help="Override adjoint_matching.clip_loss in config")
     parser.add_argument("--batch_size", type=int,
@@ -109,6 +114,9 @@ def update_config_with_args(config, args):
         config.constraint.fn = args.constraint
     if args.bound is not None:
         config.constraint.bound = args.bound
+    # General Parameters
+    if args.total_steps is not None:
+        config.total_steps = args.total_steps
     # Augmented Lagrangian Parameters
     if args.rho_init is not None:
         config.augmented_lagrangian.rho_init = args.rho_init
@@ -133,6 +141,8 @@ def update_config_with_args(config, args):
         config.adjoint_matching.clip_grad_norm = args.clip_grad_norm
     if args.clip_loss is not None:
         config.adjoint_matching.clip_loss = args.clip_loss
+    if args.lct is not None:
+        config.adjoint_matching.lct = args.lct
     if args.batch_size is not None:
         config.adjoint_matching.batch_size = args.batch_size
     if args.samples_per_update is not None:
