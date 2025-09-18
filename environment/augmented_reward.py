@@ -282,7 +282,7 @@ class AugmentedReward:
         if self.geq:
             violations = (self.tmp_constraint < self.bound).float().mean().cpu().item()
         else:
-            violations = (self.tmp_constraint > self.bound).float().mean().cpu().item()
+            violations = (self.tmp_constraint >= self.bound).float().mean().cpu().item()
         return {
             "reward": reward,
             "constraint": constraint,
