@@ -284,15 +284,15 @@ class AugmentedReward:
         else:
             violations = (self.tmp_constraint >= self.bound+1e-6).float().mean().cpu().item()
         return {
-            "reward": reward,
-            "constraint": constraint,
-            "total_reward": total_reward,
-            "constraint_violations": violations,
-            "grad_norm/full": self.last_grad_norm_full,
-            "grad_norm/reward": self.last_grad_norm_reward,
-            "grad_norm/constraint": self.last_grad_norm_constraint,
-            "grad_norm/penalty": self.last_grad_norm_penalty,
-            "grad_norm/percentage_penalty": (self.last_grad_norm_penalty / (self.last_grad_norm_full + 1e-10) if self.last_grad_norm_full is not None else 0.0),
+            "reward": float(reward),
+            "constraint": float(constraint),
+            "total_reward": float(total_reward),
+            "constraint_violations": float(violations),
+            "grad_norm/full": float(self.last_grad_norm_full),
+            "grad_norm/reward": float(self.last_grad_norm_reward),
+            "grad_norm/constraint": float(self.last_grad_norm_constraint),
+            "grad_norm/penalty": float(self.last_grad_norm_penalty),
+            "grad_norm/percentage_penalty": float((self.last_grad_norm_penalty / (self.last_grad_norm_full + 1e-10)) if self.last_grad_norm_full is not None else 0.0),
         }
 
     def get_reward_constraint(self) -> dict:
