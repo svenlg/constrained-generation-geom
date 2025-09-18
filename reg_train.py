@@ -13,7 +13,6 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, SequentialLR
 from torch.cuda.amp import autocast, GradScaler
 
-import dgl
 from dgl.dataloading import GraphDataLoader
 
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
@@ -87,9 +86,6 @@ def evaluate(model: nn.Module, loader: GraphDataLoader, device: torch.device,
     preds = torch.cat(all_preds).numpy()
     tgts = torch.cat(all_tgts).numpy()
 
-    if isinstance(loss_fn, nn.BCEWithLogitsLoss):
-        preds = torch.sigmoid(torch.tensor(preds)).numpy()
-
     mae = mean_absolute_error(tgts, preds)
     rmse = float(np.sqrt(mean_squared_error(tgts, preds)))
     r2 = r2_score(tgts, preds)
@@ -146,10 +142,7 @@ def train(
     optimizer = Adam(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     total_steps = max_epochs * max(1, len(train_loader))
     scheduler = warmup_cosine_scheduler(optimizer, total_steps, warmup_steps, min_lr=1e-6)
-    if property == "score":
-        loss_fn = nn.BCEWithLogitsLoss()
-    else:
-        loss_fn = nn.MSELoss()
+    loss_fn = nn.MSELoss()
     scaler = GradScaler(enabled=amp)
 
     # Logging / Checkpoints
@@ -315,7 +308,7 @@ def parse_args():
     p.add_argument("-e", "--experiment", type=str, required=True, help="Path to data folder (same as before)")
     model_type_choices = ["egnn", "gnn"]
     p.add_argument("-m", "--model_type", type=str, required=True, choices=model_type_choices, help="One of: egnn, gnn")
-    p.add_argument("--seed", type=int, default=None)
+    p.add_argument("--seed", type=int, default=0)
     p.add_argument("-bs", "--batch_size", type=int, default=64)
     p.add_argument("-lr", "--learning_rate", type=float, default=1e-4)
     p.add_argument("-wd", "--weight_decay", type=float, default=1e-5)

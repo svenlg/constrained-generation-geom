@@ -180,7 +180,7 @@ def adj_matching_loss_list_of_dicts(v_base, v_fine, adj, sigma):
         loss += torch.mean(term_difference) * loss_weights[feat]
     return loss
 
-def adj_matching_loss_list_of_dicts_lct(v_base, v_fine, adj, sigma, LCT:float=None):
+def adj_matching_loss_list_of_dicts_lct(v_base, v_fine, adj, sigma, LCT:float):
     """Adjoint matching loss for FM"""
     eps = 1e-12
     loss = 0.0
