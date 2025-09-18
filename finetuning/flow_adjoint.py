@@ -102,6 +102,7 @@ def create_timestep_subset(
     # Sort the idx before returning
     return np.sort(combined_samples)
 
+
 class AMDataset(Dataset):
     def __init__(self, solver_info):
         # NOTE: T is the number of steps after the cutoff time
@@ -153,42 +154,35 @@ class AMDataset(Dataset):
 
 
 #### LOSS ####
-loss_weights = {'a': 0.4, 'c': 1.0, 'e': 2.0, 'x': 3.0}
-
-def adj_matching_loss(v_base, v_fine, adj, sigma):
+def adj_matching_loss(v_base, v_fine, adj, sigma, LCT):
     """Adjoint matching loss for FM"""
+    eps = 1e-12
     diff = v_fine - v_base
-    term_diff = (2 / sigma[:,None,None]) * diff
-    term_adj = sigma[:,None,None] * adj
+    sig = sigma.view(-1, 1, 1)  
+    term_diff = (2.0 / (sig + eps)) * diff
+    term_adj = sig * adj
     term_difference = term_diff - term_adj
-    term_difference = torch.sum(torch.square(term_difference), dim=[1, 2])
-    loss = torch.mean(term_difference)
-    return loss 
-
-def adj_matching_loss_list_of_dicts(v_base, v_fine, adj, sigma):
-    """Adjoint matching loss for FM"""
-    loss = 0.0
-    for i, feat in enumerate(['x', 'a', 'c', 'e']):
-        diff = v_fine[feat] - v_base[feat]
-        term_diff = (2 / sigma[:,i][:,None,None]) * diff
-        term_adj = sigma[:,i][:,None,None] * adj[feat]
-        term_difference = term_diff - term_adj
-        term_difference = torch.sum(torch.square(term_difference), dim=[1, 2])
-        loss += torch.mean(term_difference) * loss_weights[feat]
+    per_t = (term_difference ** 2).sum(dim=[1, 2])
+    clipped = torch.clamp(per_t, max=LCT)
+    loss = clipped.sum()
     return loss
 
-def adj_matching_loss_list_of_dicts_lct(v_base, v_fine, adj, sigma, LCT:float):
+loss_weights = {'a': 0.4, 'c': 1.0, 'e': 2.0, 'x': 3.0}
+def adj_matching_loss_list_of_dicts(v_base, v_fine, adj, sigma, LCT):
     """Adjoint matching loss for FM"""
     eps = 1e-12
     loss = 0.0
     for i, feat in enumerate(['x', 'a', 'c', 'e']):
         diff = v_fine[feat] - v_base[feat]                  # [T, ..., ...]
         sig = sigma[:, i].view(-1, 1, 1)                    # [T,1,1]
-        term = (2.0 / (sig + eps)) * diff + sig * adj[feat] # [T, ..., ...]
+        term_diff = (2.0 / (sig + eps)) * diff              # [T, ..., ...]
+        term_adj = sig * adj[feat]                          # [T, ..., ...]
+        term = term_diff - term_adj                         # [T, ..., ...]
         per_t = (term ** 2).sum(dim=[1, 2])                 # [T]
         clipped = torch.clamp(per_t, max=LCT)               # [T]
-        loss = loss + clipped.mean() * loss_weights[feat]
+        loss = loss + clipped.sum() * loss_weights[feat]
     return loss
+
 
 #### SAMPLING ####
 def sampling(
@@ -246,7 +240,7 @@ class AdjointMatchingFinetuningTrainerFlowMol:
             self.sampling_config.min_num_atoms,
             self.sampling_config.max_num_atoms,
         ) = check_and_get_atom_numbers(config)
-        
+
         # Reward_lambda and LCT and clip_grad_norm
         reward_lambda = config.get("reward_lambda", 1.0)
         lct = config.get("lct", None)
@@ -413,31 +407,20 @@ class AdjointMatchingFinetuningTrainerFlowMol:
         adj = {feat: torch.stack([adj[i][feat] for i in range(len(adj))], dim=0) for feat in ['x', 'a', 'c', 'e']}
         sigma = torch.stack(sigma, dim=0)
 
-        if self.LCT is not None and self.LCT > 0.0:
-            loss = adj_matching_loss_list_of_dicts_lct(
-                v_base=v_base,
-                v_fine=v_fine,
-                adj=adj,
-                sigma=sigma,
-                LCT=self.LCT,
-            )
-        else:
-            loss = adj_matching_loss_list_of_dicts(
-                v_base=v_base,
-                v_fine=v_fine,
-                adj=adj,
-                sigma=sigma,
-            )
-        
+        loss = adj_matching_loss_list_of_dicts(
+            v_base=v_base,
+            v_fine=v_fine,
+            adj=adj,
+            sigma=sigma,
+            LCT=self.LCT,
+        )
+
         if loss.isnan().any():
             return torch.tensor(float("inf"), device=self.device)
         
-        if self.LCT is None or self.LCT <= 0.0:
-            loss = torch.clamp(loss, min=0.0, max=1e5)
-        
         # step optimizer
         self.optimizer.zero_grad()
-        
+
         # self.fine_model.zero_grad()
         loss.backward(retain_graph=False)
 

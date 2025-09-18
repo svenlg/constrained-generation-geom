@@ -19,7 +19,7 @@ class AugmentedLagrangian:
         self.lambda_min = -abs(lambda_min)
         self.tau = config.get("tau", 0.99)
         self.eta = config.get("eta", 1.25)
-        self.device = device or torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = device or torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
         # Models
         if isinstance(constraint_fn, torch.nn.Module):
@@ -51,7 +51,7 @@ class AugmentedLagrangian:
 
     def update_lambda(self, new_samples):
         # Update lambda
-        # lambda_k+1 = min(0, lambda_k - rho_k * E[constraint(x)])
+        # lambda_k+1 = min(0, lambda_k - rho_k * (E[constraint(x)]-B))
         ec = self.expected_constraint(new_samples)
         lambda_suggestion = self.lambda_ - self.rho * ec
         lambda_ = min(0, lambda_suggestion)
