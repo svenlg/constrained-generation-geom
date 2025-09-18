@@ -280,9 +280,9 @@ class AugmentedReward:
         reward = self.tmp_reward.clone().detach().mean().cpu().item()
         constraint = self.tmp_constraint.clone().detach().mean().cpu().item()
         if self.geq:
-            violations = (self.tmp_constraint < self.bound).float().mean().cpu().item()
+            violations = (self.tmp_constraint < self.bound-1e-6).float().mean().cpu().item()
         else:
-            violations = (self.tmp_constraint >= self.bound).float().mean().cpu().item()
+            violations = (self.tmp_constraint >= self.bound+1e-6).float().mean().cpu().item()
         return {
             "reward": reward,
             "constraint": constraint,
