@@ -15,6 +15,7 @@ MAX_ALLOWED_ATOMS = 75  # upper bound for molecule size (can be upto 182 for GEO
 MIN_ALLOWED_ATOMS = 30  # lower bound for molecule size (can be as low as 3 for GEOM)
 
 
+#### UTILITIES ####
 def check_and_get_atom_numbers(config: OmegaConf):
     max_nodes = config.get("max_nodes", 210)
     if config.sampling.n_atoms is not None:
@@ -103,6 +104,7 @@ def create_timestep_subset(
     return np.sort(combined_samples)
 
 
+#### DATASET ####
 class AMDataset(Dataset):
     def __init__(self, solver_info):
         # NOTE: T is the number of steps after the cutoff time
@@ -173,6 +175,7 @@ def adj_matching_loss_list_of_dicts(v_base, v_fine, adj, sigma, LCT):
     eps = 1e-12
     loss = 0.0
     for i, feat in enumerate(['x', 'a', 'c', 'e']):
+    # for i, feat in enumerate(['x', 'a', 'e']):  # x: [T, N, 3], a: [T, N, F_a], c: [T, 1], e: [T, E, F_e]
         diff = v_fine[feat] - v_base[feat]                  # [T, ..., ...]
         sig = sigma[:, i].view(-1, 1, 1)                    # [T,1,1]
         term_diff = (2.0 / (sig + eps)) * diff              # [T, ..., ...]
@@ -218,6 +221,8 @@ def sampling(
 
     return graph_trajectories
 
+
+#### TRAINER ####
 class AdjointMatchingFinetuningTrainerFlowMol:
     def __init__(self,
             config: OmegaConf,
@@ -372,6 +377,8 @@ class AdjointMatchingFinetuningTrainerFlowMol:
         v_fine = []
         adj = []
         sigma = []
+
+        dt = ts[0] - ts[1]
         
         for idx in idxs:
             t = ts[idx]
@@ -389,7 +396,7 @@ class AdjointMatchingFinetuningTrainerFlowMol:
                 t = t, 
                 alpha = alpha_t, 
                 alpha_dot = alpha_dot_t, 
-                dt = ts[0] - ts[1], 
+                dt = dt,
                 upper_edge_mask = g_base_t.edata['ue_mask'],
                 calc_adj=False
             )
@@ -433,8 +440,6 @@ class AdjointMatchingFinetuningTrainerFlowMol:
 
     def finetune(self, dataset, steps=None):
         """Finetuning the model."""
-
-        # data_loader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=True)
         c = 0
         total_loss = 0
 
@@ -450,12 +455,10 @@ class AdjointMatchingFinetuningTrainerFlowMol:
             idxs = np.random.permutation(dataset.__len__())
         
         for idx in idxs:
-            # print('outer', idx)
             sample = dataset[idx]
             loss = self.train_step(sample).item()
             total_loss = total_loss + loss
             c+=1 
-            # print('loss', loss)
 
         del dataset
         return total_loss / c

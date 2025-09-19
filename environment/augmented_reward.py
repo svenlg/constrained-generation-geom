@@ -283,17 +283,24 @@ class AugmentedReward:
             violations = (self.tmp_constraint < self.bound-1e-6).float().mean().cpu().item()
         else:
             violations = (self.tmp_constraint >= self.bound+1e-6).float().mean().cpu().item()
-        return {
+
+        ret_dict = {
             "reward": float(reward),
             "constraint": float(constraint),
             "total_reward": float(total_reward),
             "constraint_violations": float(violations),
-            "grad_norm/full": float(self.last_grad_norm_full),
-            "grad_norm/reward": float(self.last_grad_norm_reward),
-            "grad_norm/constraint": float(self.last_grad_norm_constraint),
-            "grad_norm/penalty": float(self.last_grad_norm_penalty),
-            "grad_norm/percentage_penalty": float((self.last_grad_norm_penalty / (self.last_grad_norm_full + 1e-10)) if self.last_grad_norm_full is not None else 0.0),
         }
+        if self.last_grad_norm_full is not None:
+            ret_dict['grad_norm/full'] = float(self.last_grad_norm_full)
+        if self.last_grad_norm_reward is not None:
+            ret_dict['grad_norm/reward'] = float(self.last_grad_norm_reward)
+        if self.last_grad_norm_constraint is not None:
+            ret_dict['grad_norm/constraint'] = float(self.last_grad_norm_constraint)
+        if self.last_grad_norm_penalty is not None:
+            ret_dict['grad_norm/penalty'] = float(self.last_grad_norm_penalty)
+        if self.last_grad_norm_full is not None and self.last_grad_norm_penalty is not None:
+            ret_dict['grad_norm/percentage_penalty'] = float((self.last_grad_norm_penalty / (self.last_grad_norm_full + 1e-10)) if self.last_grad_norm_full is not None else 0.0),
+        return ret_dict
 
     def get_reward_constraint(self) -> dict:
         reward = self.tmp_reward.clone().detach().cpu().numpy()
