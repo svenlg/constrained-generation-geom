@@ -24,7 +24,7 @@ from environment import AugmentedReward, wrapped_geometry_constraint
 
 from finetuning import AugmentedLagrangian, AdjointMatchingFinetuningTrainerFlowMol
 
-from regessor import GNN, MoleculeGNN
+from regessor import RCModel
 
 # Load - Flow Model
 def setup_gen_model(flow_model: str, device: torch.device): 
@@ -41,6 +41,7 @@ def load_regressor(config: OmegaConf, device: torch.device) -> nn.Module:
     model_path = osp.join("pretrained_models", config.fn, config.model_type, config.date, "best_model.pt")
     state = torch.load(model_path, map_location=device)
     if config.model_type == "gnn":
+        property = state["config"]["property"]
         model_config = {
             "property": state["config"]["property"],
             "node_feats": K_a + K_c + K_x,
@@ -48,8 +49,9 @@ def load_regressor(config: OmegaConf, device: torch.device) -> nn.Module:
             "hidden_dim": state["config"]["hidden_dim"],
             "depth": state["config"]["depth"],
         }
-        model = GNN(**model_config)
+        model = RCModel(property=property, config=config, model_config=model_config)
     elif config.model_type == "egnn":
+        property = state["config"]["property"]
         model_config = {
             "property": state["config"]["property"],
             "num_atom_types": K_a,
@@ -60,9 +62,11 @@ def load_regressor(config: OmegaConf, device: torch.device) -> nn.Module:
             "use_gumbel": state["config"]["use_gumbel"],
             "equivariant": state["config"]["equivariant"],
         }
-        model = MoleculeGNN(**model_config)
+        model = RCModel(property=property, config=config, model_config=model_config)
 
-    model.load_state_dict(state["model_state"])
+    filter_config = OmegaConf.to_container(config.filter_config)
+    model_config["filter_config"] = filter_config
+    model.gnn.load_state_dict(state["model_state"])
     return model, OmegaConf.create(model_config)
 
 def main():
@@ -142,7 +146,7 @@ def main():
     # Setup - Reward Functions
     reward_model, reward_model_config = load_regressor(config.reward, device=device)
     if config.rc_finetune is not None and config.reward.fine_tuning:
-        reward_finetuner = setup_fine_tuner(config.reward.fn, reward_model, config.rc_finetune)
+        reward_finetuner = setup_fine_tuner(config.reward.fn, reward_model.gnn, config.rc_finetune)
 
     # Setup - Constraint Functions
     if config.constraint.fn == "geometry":
@@ -155,7 +159,9 @@ def main():
         constraint_model, constraint_model_config = load_regressor(config.constraint, device=device)
         constrain_geq_bound = False
         if config.rc_finetune is not None and config.constraint.fine_tuning:
-            constraint_finetuner = setup_fine_tuner(config.constraint.fn, constraint_model, config.rc_finetune)
+            constraint_finetuner = setup_fine_tuner(config.constraint.fn, constraint_model.gnn, config.rc_finetune)
+    else:
+        raise ValueError(f"Unknown constraint function: {config.constraint.fn}")
 
     rc_fine_tune_freq = config.rc_finetune.freq if config.reward.fine_tuning or config.constraint.fine_tuning else 0
 

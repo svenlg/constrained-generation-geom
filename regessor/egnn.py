@@ -115,7 +115,7 @@ class EGNNBlock(nn.Module):
 
 
 # ---------- Full Model ----------
-class MoleculeGNN(nn.Module):
+class EGNN(nn.Module):
     """
     A single model that can run in:
       - edge-aware (non-equivariant) mode, or
@@ -189,7 +189,7 @@ class MoleculeGNN(nn.Module):
         e_h = self.bond_emb(E) # (E, d_each)
         return self.edge_lift(e_h)  # (E, H)
 
-    def forward(self, g: dgl.DGLGraph, return_logits: bool = False):
+    def forward(self, g: dgl.DGLGraph):
         with g.local_scope():
             # Node/edge encodings
             h = self.encode_nodes(g)               # (N, H)
@@ -204,7 +204,5 @@ class MoleculeGNN(nn.Module):
             g.ndata["h_final"] = g.ndata["h"]
             hg = dgl.readout_nodes(g, "h_final", op="mean")
             out = self.head(hg) / self.tau
-            if return_logits:
-                return out
             return self.output(out)
 
