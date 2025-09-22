@@ -17,7 +17,7 @@ from dgl.dataloading import GraphDataLoader
 
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-from regessor import GNN, MoleculeGNN, make_loaders  
+from regessor import GNN, EGNN, make_loaders  
 
 from utils.utils import set_seed
 
@@ -29,7 +29,7 @@ def build_model(property: str, model: str, hidden_dim: int, depth: int) -> nn.Mo
     K_e = 5  # number of bond types (none, single, double, triple, aromatic)
 
     if model == "egnn":
-        model = MoleculeGNN(
+        model = EGNN(
             property = property,
             num_atom_types = K_a,
             num_charge_classes = K_c,
