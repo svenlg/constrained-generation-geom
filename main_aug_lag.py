@@ -157,7 +157,6 @@ def main():
         config.constraint.fine_tuning = False
     elif config.constraint.fn == "score":
         constraint_model, constraint_model_config = load_regressor(config.constraint, device=device)
-        constrain_geq_bound = False
         if config.rc_finetune is not None and config.constraint.fine_tuning:
             constraint_finetuner = setup_fine_tuner(config.constraint.fn, constraint_model.gnn, config.rc_finetune)
     else:

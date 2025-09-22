@@ -162,7 +162,7 @@ class AugmentedReward:
     #         ).mean()
     #     return self.alpha * self.tmp_total
 
-    def __call__(self, x: torch.Tensor) -> torch.Tensor:
+    def __call__(self, x: Union[torch.Tensor, dgl.DGLGraph]) -> torch.Tensor:
         # Maximize reward, minimize constraint penalty
         self.tmp_reward = self.reward_fn(x)
         self.tmp_constraint = self.constraint_fn(x)
