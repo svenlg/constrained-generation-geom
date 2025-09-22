@@ -6,7 +6,6 @@ from typing import List, Dict
 from flowmol.data_processing.priors import rigid_alignment
 from flowmol.data_processing.utils import get_upper_edge_mask
 from torch.nn.functional import one_hot
-import torch_geometric.data as pyg_data
 
 bond_type_map = [None, 
                  Chem.rdchem.BondType.SINGLE, 
@@ -81,7 +80,7 @@ class SampledMolecule:
             if 'x_1_pred' in traj_frames and build_ep_traj:
                 self.ep_traj_mols = self.process_traj_frames(traj_frames, ep_traj=True)
 
-        self.pyg_mol = self.to_pyg()
+        # self.pyg_mol = self.to_pyg()
 
     @classmethod
     def from_rdkit_mol(cls, mol: Chem.Mol, atom_type_map: List[str] = None):
@@ -199,48 +198,48 @@ class SampledMolecule:
 
         return traj_mols
     
-    def to_pyg(self):
-        """
-        Convert the DGL graph to a PyTorch Geometric Data object.
+    # def to_pyg(self):
+    #     """
+    #     Convert the DGL graph to a PyTorch Geometric Data object.
         
-        Returns:
-        torch_geometric.data.Data: A PyG Data object representing the molecule
-        """
-        # Extract node features
-        x_onehot = self.g.ndata['a_1']  # atom type one-hot
-        x = torch.argmax(self.g.ndata['a_1'], dim=-1)  # atom type index
-        pos = self.g.ndata['x_1']  # 3D coordinates
+    #     Returns:
+    #     torch_geometric.data.Data: A PyG Data object representing the molecule
+    #     """
+    #     # Extract node features
+    #     x_onehot = self.g.ndata['a_1']  # atom type one-hot
+    #     x = torch.argmax(self.g.ndata['a_1'], dim=-1)  # atom type index
+    #     pos = self.g.ndata['x_1']  # 3D coordinates
         
-        # Extract edge information
-        edge_index = torch.stack([
-            torch.cat([self.bond_src_idxs, self.bond_dst_idxs]),
-            torch.cat([self.bond_dst_idxs, self.bond_src_idxs])
-        ])
+    #     # Extract edge information
+    #     edge_index = torch.stack([
+    #         torch.cat([self.bond_src_idxs, self.bond_dst_idxs]),
+    #         torch.cat([self.bond_dst_idxs, self.bond_src_idxs])
+    #     ])
         
-        # Edge features (bond types)
-        edge_attr = self.g.edata['e_1']
+    #     # Edge features (bond types)
+    #     edge_attr = self.g.edata['e_1']
         
-        # Optional: node charges if not excluded
-        if not self.exclude_charges:
-            charges = self.g.ndata['c_1']
-        else:
-            charges = None
+    #     # Optional: node charges if not excluded
+    #     if not self.exclude_charges:
+    #         charges = self.g.ndata['c_1']
+    #     else:
+    #         charges = None
         
-        # Construct PyG Data object
-        pyg_graph = pyg_data.Data(
-            x=x,  # node features (atom types)
-            pos=pos,  # node positions
-            edge_index=edge_index,  # edge connectivity
-            edge_attr=edge_attr,  # edge features (bond types)
-            num_nodes=self.num_atoms,
-            x_onehot=x_onehot
-        )
+    #     # Construct PyG Data object
+    #     pyg_graph = pyg_data.Data(
+    #         x=x,  # node features (atom types)
+    #         pos=pos,  # node positions
+    #         edge_index=edge_index,  # edge connectivity
+    #         edge_attr=edge_attr,  # edge features (bond types)
+    #         num_nodes=self.num_atoms,
+    #         x_onehot=x_onehot
+    #     )
         
-        # Add charges if available
-        if charges is not None:
-            pyg_graph.node_charge = charges
+    #     # Add charges if available
+    #     if charges is not None:
+    #         pyg_graph.node_charge = charges
         
-        return pyg_graph
+    #     return pyg_graph
     
 
 def extract_moldata_from_graph(g: dgl.DGLGraph, atom_type_map: List[str], exclude_charges: bool = False, ctmc_mol: bool = False):

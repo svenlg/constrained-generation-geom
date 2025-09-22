@@ -249,7 +249,7 @@ class AdjointMatchingFinetuningTrainerFlowMol:
         # Reward_lambda and LCT and clip_grad_norm
         reward_lambda = config.get("reward_lambda", 1.0)
         lct = config.get("lct", None)
-        self.LCT = lct * reward_lambda**2 if lct is not None and lct > 0.0 else None
+        self.LCT = lct * reward_lambda**2 if lct > 0.0 else 0.0
         self.clip_grad_norm = config.get("clip_grad_norm", 1.0)
 
         # Models
@@ -324,12 +324,12 @@ class AdjointMatchingFinetuningTrainerFlowMol:
             graph_trajectories = graph_trajectories[::-1]
 
             # Cutoff time for efficiency
-            if self.cutoff_time < 1.0:
-                cutoff_idx = int(self.cutoff_time * (ts.shape[0] - 1))
+            if self.cutoff_time > 0.0:
+                cutoff_idx = int((1 - self.cutoff_time) * (ts.shape[0] - 1))
                 ts = ts[:cutoff_idx + 1]
                 graph_trajectories = graph_trajectories[:cutoff_idx + 1]
                 sigmas = sigmas[:cutoff_idx] # sigmas has one less entry than ts
-            
+
             # graph_trajectories is a list of the intermediate graphs
             solver_info = solver.solve(graph_trajectories=graph_trajectories, ts=ts)
             # add sigma_t to solver_info

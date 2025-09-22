@@ -14,11 +14,12 @@ class RCModel(nn.Module):
 
         # General settings
         self.property = property
+        self.config = config
         
         # Model
-        if self.config.model_type == "GNN":
+        if self.config.model_type == "gnn":
             self.gnn = GNN(**model_config)
-        elif self.config.model_type == "EGNN":
+        elif self.config.model_type == "egnn":
             self.gnn = EGNN(**model_config)
         else:
             raise ValueError(f"Unknown model type: {self.model_config.model_type}")
