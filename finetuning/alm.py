@@ -9,7 +9,6 @@ class AugmentedLagrangian:
             config: OmegaConf,
             constraint_fn: callable,
             bound: float,
-            geq: bool = False,
             device: torch.device = None,
         ):
         # Config
@@ -24,11 +23,9 @@ class AugmentedLagrangian:
         # Models
         if isinstance(constraint_fn, torch.nn.Module):
             self.constraint_fn = constraint_fn.to(self.device)
-            self.constraint_fn.eval()
         else:
             self.constraint_fn = constraint_fn
         self.bound = float(bound)
-        self.geq = geq  # True if constraint is g(x) >= bound, False if g(x) <= bound
 
         # ALM 
         self.lambda_ = 0
@@ -41,10 +38,7 @@ class AugmentedLagrangian:
 
     def expected_constraint(self, new_samples):
         self.exp_constraint = self.constraint_fn(new_samples).mean().detach().cpu().item()
-        if self.geq:
-            self.g = self.bound - self.exp_constraint
-        else:
-            self.g = self.exp_constraint - self.bound
+        self.g = self.exp_constraint - self.bound
         # self.exp_constraint = torch.mean(constraint).detach().cpu().item() - self.bound
         self.contraction_value = min(-self.lambda_/self.rho , self.g)
         return copy.deepcopy(self.g)
@@ -75,6 +69,7 @@ class AugmentedLagrangian:
         return rho
 
     def update_lambda_rho(self, new_samples):
+        self.constraint_fn.eval()
         self.lambda_ = self.update_lambda(new_samples)
         self.rho = self.update_rho()
     

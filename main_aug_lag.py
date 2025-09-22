@@ -149,7 +149,7 @@ def main():
         reward_finetuner = setup_fine_tuner(config.reward.fn, reward_model.gnn, config.rc_finetune)
 
     # Setup - Constraint Functions
-    if config.constraint.fn == "geometry":
+    if config.constraint.fn == "geometry" and False:
         constraint_model = wrapped_geometry_constraint(config.constraint)
         constrain_geq_bound = True if config.constraint.get("reduction", "min") not in ["relu", "relu_mean"] else False
         if not constrain_geq_bound: # we have relu - bound is handled in constraint function
@@ -219,7 +219,6 @@ def main():
         constraint_fn = constraint_model,
         alpha = reward_lambda,
         bound = config.constraint.bound,
-        geq = constrain_geq_bound,
         config = config.augmented_reward,
         device = device,
     )
@@ -273,7 +272,6 @@ def main():
         config = config.augmented_lagrangian,
         constraint_fn = constraint_model,
         bound = config.constraint.bound,
-        geq = constrain_geq_bound,
         device = device,
     )
     # Set initial expected constraint (only needed for logging)
