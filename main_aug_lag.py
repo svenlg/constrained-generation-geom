@@ -36,7 +36,7 @@ def setup_gen_model(flow_model: str, device: torch.device):
 def load_regressor(config: OmegaConf, device: torch.device) -> nn.Module:
     K_x = 3  # number of spatial dimensions (3D)
     K_a = 10 # number of atom features
-    K_c = 6  # number of charge classes (0, +1, -1, +2)
+    K_c = 6  # number of charge classes
     K_e = 5  # number of bond types (none, single, double, triple, aromatic)
     model_path = osp.join("pretrained_models", config.fn, config.model_type, config.date, "best_model.pt")
     state = torch.load(model_path, map_location=device)
