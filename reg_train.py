@@ -11,7 +11,6 @@ import torch
 from torch import nn
 from torch.optim import Adam
 from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, SequentialLR
-from torch.cuda.amp import autocast, GradScaler
 
 from dgl.dataloading import GraphDataLoader
 
@@ -126,7 +125,6 @@ def train(
     wandb_project: str = None,
     wandb_name: str = None,
     early_stop_patience: int = 20,
-    amp: bool = True,
 ):
     set_seed(seed)
 
@@ -143,7 +141,6 @@ def train(
     total_steps = max_epochs * max(1, len(train_loader))
     scheduler = warmup_cosine_scheduler(optimizer, total_steps, warmup_steps, min_lr=1e-6)
     loss_fn = nn.MSELoss()
-    scaler = GradScaler(enabled=amp)
 
     # Logging / Checkpoints
     run_id = datetime.now().strftime("%m%d_%H%M")
@@ -165,7 +162,6 @@ def train(
         "warmup_steps": warmup_steps,
         "grad_clip": grad_clip,
         "seed": seed,
-        "amp": amp,
     }
 
     # WandB
@@ -202,19 +198,17 @@ def train(
 
             optimizer.zero_grad(set_to_none=True)
 
-            with autocast(enabled=amp):
-                preds = model(graphs).squeeze(-1)
-                loss = loss_fn(preds, targets)
 
-            scaler.scale(loss).backward()
+            preds = model(graphs).squeeze(-1)
+            loss = loss_fn(preds, targets)
+
+            loss.backward()
 
             # Gradient clipping
             if grad_clip is not None and grad_clip > 0:
-                scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
 
-            scaler.step(optimizer)
-            scaler.update()
+            optimizer.step()
             scheduler.step()  # step per batch so warmup works
 
             running.append(loss.item())
@@ -318,7 +312,6 @@ def parse_args():
     p.add_argument("--warmup_steps", type=int, default=1000)
     p.add_argument("--num_workers", type=int, default=4)
     p.add_argument("--grad_clip", type=float, default=1.0)
-    p.add_argument("--no_amp", action="store_true", help="Disable mixed precision")
     p.add_argument("--use_wandb", action="store_true")
     p.add_argument("--wandb_project", type=str, default=None)
     p.add_argument("--wandb_name", type=str, default=None)
@@ -359,6 +352,5 @@ if __name__ == "__main__":
         wandb_project=args.wandb_project,
         wandb_name=args.wandb_name,
         early_stop_patience=args.early_stop_patience,
-        amp=not args.no_amp and torch.cuda.is_available(),
     )
 

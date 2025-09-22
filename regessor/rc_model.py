@@ -49,7 +49,7 @@ class RCModel(nn.Module):
         if self.filter_function is not None:
             out = self.filter_function(gnn_out)
         if return_gnn_output:
-            gnn_out = gnn_out.detach().copy().requires_grad_(False).mean()
+            gnn_out = gnn_out.detach().requires_grad_(False).mean()
             return out, gnn_out
         return out
 

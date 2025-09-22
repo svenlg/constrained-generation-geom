@@ -46,9 +46,7 @@ def pred_vs_real(rd_mols: List, pred_dict: dict, reward: str, constraint: str) -
 
     rmse = lambda x, y: ((x - y) ** 2).mean() ** 0.5
     mse = lambda x, y: ((x - y) ** 2).mean()
-    mae = lambda x, y: (abs(x - y)).mean()
-    r2 = lambda x, y: 1 - ((x - y) ** 2).sum() / ((y - y.mean()) ** 2).sum()
-    
+    mae = lambda x, y: (abs(x - y)).mean()    
     df_true = get_rc_properties(rd_mols, reward=reward, constraint=constraint)
 
     true_reward = df_true[reward].to_numpy()
@@ -57,7 +55,7 @@ def pred_vs_real(rd_mols: List, pred_dict: dict, reward: str, constraint: str) -
         "reward/rmse": rmse(true_reward, pred_reward),
         "reward/mse": mse(true_reward, pred_reward),
         "reward/mae": mae(true_reward, pred_reward),
-        "reward/r2": r2(true_reward, pred_reward),
+        # "reward/r2": r2(true_reward, pred_reward),
         "true/reward": true_reward.mean(),
         "true/reward_std": true_reward.std(),
     }
@@ -70,7 +68,7 @@ def pred_vs_real(rd_mols: List, pred_dict: dict, reward: str, constraint: str) -
             "constraint/rmse": rmse(true_constraint, pred_constraint),
             "constraint/mse": mse(true_constraint, pred_constraint),
             "constraint/mae": mae(true_constraint, pred_constraint),
-            "constraint/r2": r2(true_constraint, pred_constraint),
+            # "constraint/r2": r2(true_constraint, pred_constraint),
             "true/constraint": true_constraint.mean(),
             "true/constraint_std": true_constraint.std(),
         }
