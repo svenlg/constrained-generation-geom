@@ -24,12 +24,13 @@ class AugmentedReward:
             self.reward_fn = reward_fn
         if isinstance(constraint_fn, torch.nn.Module):
             self.constraint_fn = constraint_fn.to(self.device)
-            self.constraint_fn.eval()
         else:
             self.constraint_fn = constraint_fn
         
         self.alpha = copy.deepcopy(float(alpha))
         self.bound = copy.deepcopy(float(bound))
+
+        self.filter_bound = self.constraint_fn.filter_function(torch.tensor(self.bound).to(self.device)).item()
 
         # Initialize lambda and rho
         self.lambda_ = 0.0
@@ -83,9 +84,18 @@ class AugmentedReward:
         """
         tmp_lambda = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.lambda_
         tmp_rho = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.rho_
-        tmp_bound = torch.ones_like(self.tmp_constraint) * self.bound
+        tmp_bound = torch.ones_like(self.tmp_constraint) * self.filter_bound
         g = self.tmp_constraint - tmp_bound - tmp_lambda / tmp_rho
         return (tmp_rho * torch.clamp(g, min=0.0)).mean()
+    
+    def _penalty_mean(self) -> torch.Tensor:
+        """mean((rho/2)*relu(g)^2), with g in units matching constraint mode."""
+        tmp_lambda = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.lambda_
+        tmp_rho = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.rho_
+        tmp_bound = torch.ones_like(self.tmp_constraint) * self.filter_bound
+        g = self.tmp_constraint - tmp_bound - tmp_lambda / tmp_rho
+        relu_g = torch.clamp(g, min=0.0)
+        return ((tmp_rho / 2.0) * (relu_g ** 2)).mean()
 
     def _materialize_grads_like_inputs(self, inputs, grads):
         # Replace None grads with zeros_like corresponding input so we can safely package returns.
@@ -110,15 +120,6 @@ class AugmentedReward:
             x = x.clone().detach().requires_grad_(True)
             inputs = [x]
         return x, inputs
-
-    def _penalty_mean(self) -> torch.Tensor:
-        """mean((rho/2)*relu(g)^2), with g in units matching constraint mode."""
-        tmp_lambda = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.lambda_
-        tmp_rho = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.rho_
-        tmp_bound = torch.ones_like(self.tmp_constraint) * self.bound
-        g = self.tmp_constraint - tmp_bound - tmp_lambda / tmp_rho
-        relu_g = torch.clamp(g, min=0.0)
-        return ((tmp_rho / 2.0) * (relu_g ** 2)).mean()
 
     def _autograd_norm(self, scalar: torch.Tensor, inputs) -> float:
         """Grad norm of 'scalar' w.r.t. 'inputs'."""
@@ -164,8 +165,8 @@ class AugmentedReward:
 
     def __call__(self, x: Union[torch.Tensor, dgl.DGLGraph]) -> torch.Tensor:
         # Maximize reward, minimize constraint penalty
-        self.tmp_reward = self.reward_fn(x)
-        self.tmp_constraint = self.constraint_fn(x)
+        self.tmp_reward, self.gnn_reward = self.reward_fn(x, return_gnn_output=True) # tmp_reward shape (batch,), gnn_reward is scalar
+        self.tmp_constraint, self.gnn_constraint = self.constraint_fn(x, return_gnn_output=True) # tmp_constraint shape (batch,), gnn_constraint is scalar
 
         reward = self.tmp_reward.mean()
         constraint = self.tmp_constraint.mean()
@@ -256,15 +257,20 @@ class AugmentedReward:
         total_reward = self.tmp_total.clone().detach().cpu().item()
         reward = self.tmp_reward.clone().detach().mean().cpu().item()
         constraint = self.tmp_constraint.clone().detach().mean().cpu().item()
-        violations = (self.tmp_constraint >= self.bound+1e-6).float().mean().cpu().item()
-        penalty = self.rho_ / 2.0 * max(constraint - self.bound, 0.0) ** 2
-
+        violations = (self.tmp_constraint >= self.filter_bound+1e-6).float().mean().cpu().item()
+        penalty = self.rho_ / 2.0 * max(constraint - self.filter_bound, 0.0) ** 2
+        pred_reward = self.gnn_reward.detach().cpu().item()
+        pred_constraint = self.gnn_constraint.detach().cpu().item()
+        predict_penalty = self.rho_ / 2.0 * max(pred_constraint - self.filter_bound, 0.0) ** 2
         ret_dict = {
             "reward": float(reward),
             "constraint": float(constraint),
             "total_reward": float(total_reward),
             "constraint_violations": float(violations),
             "penalty": float(penalty),
+            "pred/reward": float(pred_reward),
+            "pred/constraint": float(pred_constraint),
+            "pred/penalty": float(predict_penalty),
         }
         if self.last_grad_norm_full is not None:
             ret_dict['grad_norm/full'] = float(self.last_grad_norm_full)
@@ -279,11 +285,11 @@ class AugmentedReward:
         return ret_dict
 
     def get_reward_constraint(self) -> dict:
-        reward = self.tmp_reward.clone().detach().cpu().numpy()
-        constraint = self.tmp_constraint.clone().detach().cpu().numpy()
+        pred_reward = self.gnn_reward.clone().detach().cpu().numpy()
+        pred_constraint = self.gnn_constraint.clone().detach().cpu().numpy()
         return {
-            "reward": reward,
-            "constraint": constraint,
+            "reward": pred_reward,
+            "constraint": pred_constraint,
         }
 
 

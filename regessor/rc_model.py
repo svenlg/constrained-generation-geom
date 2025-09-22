@@ -43,10 +43,13 @@ class RCModel(nn.Module):
         if property == "score" and self.filter_config.linear_output:
             self.gnn.output = nn.Identity()
         
-    def forward(self, g: dgl.DGLGraph, return_logits: bool = False) -> Tensor:
+    def forward(self, g: dgl.DGLGraph, return_gnn_output: bool = False) -> Tensor:
         self.gnn.train()
         gnn_out = self.gnn(g)
         if self.filter_function is not None:
-            gnn_out = self.filter_function(gnn_out)
-        return gnn_out
+            out = self.filter_function(gnn_out)
+        if return_gnn_output:
+            gnn_out = gnn_out.detach().copy().requires_grad_(False).mean()
+            return out, gnn_out
+        return out
 

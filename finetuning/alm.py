@@ -26,6 +26,8 @@ class AugmentedLagrangian:
         else:
             self.constraint_fn = constraint_fn
         self.bound = float(bound)
+        self.filter_bound = self.constraint_fn.filter_function(torch.tensor(self.bound).to(self.device)).item()
+        print(f"Filter bound: {self.filter_bound}, bound: {self.bound}")
 
         # ALM 
         self.lambda_ = 0
@@ -37,8 +39,10 @@ class AugmentedLagrangian:
         return copy.deepcopy(self.lambda_), copy.deepcopy(self.rho)
 
     def expected_constraint(self, new_samples):
-        self.exp_constraint = self.constraint_fn(new_samples).mean().detach().cpu().item()
-        self.g = self.exp_constraint - self.bound
+        self.exp_constraint, self.gnn_constraint = self.constraint_fn(new_samples, return_gnn_output=True)
+        self.exp_constraint = self.exp_constraint.mean().detach().cpu().item()
+        self.g = self.exp_constraint - self.filter_bound
+        self.pred_g = self.gnn_constraint.detach().cpu().item() - self.filter_bound
         # self.exp_constraint = torch.mean(constraint).detach().cpu().item() - self.bound
         self.contraction_value = min(-self.lambda_/self.rho , self.g)
         return copy.deepcopy(self.g)
@@ -75,8 +79,10 @@ class AugmentedLagrangian:
     
     def get_statistics(self):
         return {
-            "lambda": copy.deepcopy(self.lambda_),
-            "rho": copy.deepcopy(self.rho),
-            "expected_constraint": copy.deepcopy(self.exp_constraint),
+            "alm/lambda": copy.deepcopy(self.lambda_),
+            "alm/rho": copy.deepcopy(self.rho),
+            "alm/expected_constraint": copy.deepcopy(self.exp_constraint),
+            "alm/pred_g": copy.deepcopy(self.pred_g),
+            "alm/g": copy.deepcopy(self.g),
         }
 

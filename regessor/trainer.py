@@ -184,18 +184,6 @@ class GNNFineTuner:
         self.model.load_state_dict(state["model"], strict=strict)
 
 
-def setup_fine_tuner(property: str, model: nn.Module, config: OmegaConf = None) -> GNNFineTuner:
-    fine_tuner = GNNFineTuner(
-        property=property,
-        model=model,
-        learning_rate=1e-5 if config is None else config.get("lr", 1e-5),
-        weight_decay=1e-6 if config is None else config.get("weight_decay", 1e-6),
-        grad_clip=1.0 if config is None else config.get("grad_clip", 1.0),
-        amp=True,
-    )
-    return fine_tuner
-
-
 def finetune(
     finetuner: GNNFineTuner,
     data: List[DGLGraph],
@@ -215,3 +203,15 @@ def finetune(
         num_workers=0 if config is None else config.get("num_workers", 0),
     )
     return history
+
+
+def setup_fine_tuner(property: str, model: nn.Module, config: OmegaConf = None) -> GNNFineTuner:
+    fine_tuner = GNNFineTuner(
+        property=property,
+        model=model,
+        learning_rate=1e-5 if config is None else config.get("lr", 1e-5),
+        weight_decay=1e-6 if config is None else config.get("weight_decay", 1e-6),
+        grad_clip=1.0 if config is None else config.get("grad_clip", 1.0),
+        amp=True,
+    )
+    return fine_tuner
