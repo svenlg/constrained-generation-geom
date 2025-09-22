@@ -12,7 +12,6 @@ class AugmentedReward:
             constraint_fn: callable, # if torch module make sure to call .to(self.device)
             alpha: float,
             bound: float,
-            geq: bool = False,  # if True, constraint_fn(x) >= bound is desired; if False, constraint_fn(x) <= bound is desired
             device: torch.device = None,
             config: OmegaConf = None,
         ):
@@ -31,7 +30,6 @@ class AugmentedReward:
         
         self.alpha = copy.deepcopy(float(alpha))
         self.bound = copy.deepcopy(float(bound))
-        self.geq = geq
 
         # Initialize lambda and rho
         self.lambda_ = 0.0
@@ -164,24 +162,6 @@ class AugmentedReward:
     #         ).mean()
     #     return self.alpha * self.tmp_total
 
-    # def __call__(self, x: torch.Tensor) -> torch.Tensor:
-    #     # Maximize reward, minimize constraint penalty
-    #     self.tmp_reward = self.reward_fn(x)
-    #     self.tmp_constraint = self.constraint_fn(x)
-
-    #     # --- augmented Lagrangian pieces ---
-    #     tmp_lambda = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.lambda_
-    #     tmp_rho = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.rho_
-    #     tmp_bound = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.bound
-
-    #     if self.geq:
-    #         g = tmp_bound - self.tmp_constraint - tmp_lambda / tmp_rho
-    #     else:
-    #         g = self.tmp_constraint - tmp_bound - tmp_lambda / tmp_rho
-        
-    #     self.tmp_total = ( self.tmp_reward - (tmp_rho / 2.0) * torch.clamp(g, min=0.0) ** 2 ).mean()
-    #     return self.alpha * self.tmp_total
-
     def __call__(self, x: torch.Tensor) -> torch.Tensor:
         # Maximize reward, minimize constraint penalty
         self.tmp_reward = self.reward_fn(x)
@@ -190,10 +170,7 @@ class AugmentedReward:
         reward = self.tmp_reward.mean()
         constraint = self.tmp_constraint.mean()
 
-        if self.geq:
-            g = self.bound - constraint - self.lambda_ / self.rho_
-        else:
-            g = constraint - self.bound - self.lambda_ / self.rho_
+        g = constraint - self.bound - self.lambda_ / self.rho_
 
         self.tmp_total = ( reward - (self.rho_ / 2.0) * torch.clamp(g, min=0.0) ** 2 ).mean()
         return self.alpha * self.tmp_total
@@ -279,16 +256,15 @@ class AugmentedReward:
         total_reward = self.tmp_total.clone().detach().cpu().item()
         reward = self.tmp_reward.clone().detach().mean().cpu().item()
         constraint = self.tmp_constraint.clone().detach().mean().cpu().item()
-        if self.geq:
-            violations = (self.tmp_constraint < self.bound-1e-6).float().mean().cpu().item()
-        else:
-            violations = (self.tmp_constraint >= self.bound+1e-6).float().mean().cpu().item()
+        violations = (self.tmp_constraint >= self.bound+1e-6).float().mean().cpu().item()
+        penalty = self.rho_ / 2.0 * max(constraint - self.bound, 0.0) ** 2
 
         ret_dict = {
             "reward": float(reward),
             "constraint": float(constraint),
             "total_reward": float(total_reward),
             "constraint_violations": float(violations),
+            "penalty": float(penalty),
         }
         if self.last_grad_norm_full is not None:
             ret_dict['grad_norm/full'] = float(self.last_grad_norm_full)

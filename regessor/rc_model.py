@@ -30,8 +30,10 @@ class RCModel(nn.Module):
             self.filter_function = lambda x: torch.where(x > self.filter_config.threshold, x, torch.tensor(0.0))
         elif self.filter_config.function == "gaussian":
             self.filter_function = lambda x: torch.exp(-0.5 * ((x - self.filter_config.mu) / self.filter_config.sigma) ** 2)
-        elif self.filter_config.function == "parabell":
+        elif self.filter_config.function == "max_parabel":
             self.filter_function = lambda x: -torch.square(x-self.filter_config.mu)
+        elif self.filter_config.function == "min_parabel":
+            self.filter_function = lambda x: torch.square(x-self.filter_config.mu)        
         elif self.filter_config.function == "linear":
             self.filter_function = lambda x: x
         else:
