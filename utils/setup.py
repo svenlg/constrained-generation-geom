@@ -41,8 +41,6 @@ def parse_arguments():
                         help="Override rho_max in config")
     parser.add_argument("--eta", type=float,
                         help="Override eta in config")
-    parser.add_argument("--update_base_model", type=bool,
-                        help="Override update_base_model in config, default: true")
     parser.add_argument("--baseline", action='store_true',
                         help="Do baseline, default: false")
     parser.add_argument("--base_lambda", type=float,
@@ -126,8 +124,6 @@ def update_config_with_args(config, args):
         config.augmented_lagrangian.eta = args.eta
     if args.lagrangian_updates is not None:
         config.augmented_lagrangian.lagrangian_updates = args.lagrangian_updates
-    if args.update_base_model:
-        config.augmented_lagrangian.update_base_model = args.update_base_model
     if args.baseline:
         config.augmented_lagrangian.baseline = True
     if args.base_lambda is not None:
