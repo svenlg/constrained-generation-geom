@@ -40,8 +40,8 @@ class RCModel(nn.Module):
         else:
             raise ValueError(f"Unknown filter function: {self.filter_config.function}")
 
-        if property == "score" and self.filter_config.linear_output:
-            self.gnn.output = nn.Identity()
+        # if property == "score" and self.filter_config.linear_output:
+        #     self.gnn.output = nn.Identity()
         
     def forward(self, g: dgl.DGLGraph, return_gnn_output: bool = False) -> Tensor:
         self.gnn.train()
