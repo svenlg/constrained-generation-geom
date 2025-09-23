@@ -40,7 +40,7 @@ def extract_dipole(output: str, verbose: bool = True) -> float:
     # The last group is the total dipole in Debye
     dipole = float(match.group(4))
     if dipole < LOWEST_ALLOWED_DIPOLE or dipole > MAX_ALLOWED_DIPOLE:
-        dipole = np.inf
+        dipole = 0.0
     return float(dipole)
 
 def extract_homo_lumo(output: str, verbose: bool = True) -> tuple:

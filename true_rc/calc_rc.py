@@ -52,9 +52,6 @@ def pred_vs_real(rd_mols: List, pred_dict: dict, reward: str, constraint: str) -
 
     true_reward = df_true[reward].to_numpy()
     pred_reward = pred_dict["reward"].flatten()
-    inf_mask = (true_reward == np.inf) | (pred_reward == np.inf)
-    true_reward = true_reward[~inf_mask]
-    pred_reward = pred_reward[~inf_mask]
     reward_dct = {
         "reward/rmse": rmse(true_reward, pred_reward),
         "reward/mse": mse(true_reward, pred_reward),
@@ -66,10 +63,6 @@ def pred_vs_real(rd_mols: List, pred_dict: dict, reward: str, constraint: str) -
     if constraint == "score":
         true_constraint = df_true[constraint].to_numpy()
         pred_constraint = pred_dict["constraint"].flatten()
-
-        inf_mask = (true_constraint == np.inf) | (pred_constraint == np.inf)
-        true_constraint = true_constraint[~inf_mask]
-        pred_constraint = pred_constraint[~inf_mask]
 
         constraint_dict = {
             "constraint/rmse": rmse(true_constraint, pred_constraint),
