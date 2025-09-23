@@ -1,4 +1,5 @@
 import time
+import numpy as np
 import pandas as pd
 from true_rc.posebuster_scorer import posebusters_score
 from true_rc.xtb_calc import compute_xtb
@@ -51,11 +52,13 @@ def pred_vs_real(rd_mols: List, pred_dict: dict, reward: str, constraint: str) -
 
     true_reward = df_true[reward].to_numpy()
     pred_reward = pred_dict["reward"].flatten()
+    inf_mask = (true_reward == np.inf) | (pred_reward == np.inf)
+    true_reward = true_reward[~inf_mask]
+    pred_reward = pred_reward[~inf_mask]
     reward_dct = {
         "reward/rmse": rmse(true_reward, pred_reward),
         "reward/mse": mse(true_reward, pred_reward),
         "reward/mae": mae(true_reward, pred_reward),
-        # "reward/r2": r2(true_reward, pred_reward),
         "true/reward": true_reward.mean(),
         "true/reward_std": true_reward.std(),
     }
@@ -64,11 +67,14 @@ def pred_vs_real(rd_mols: List, pred_dict: dict, reward: str, constraint: str) -
         true_constraint = df_true[constraint].to_numpy()
         pred_constraint = pred_dict["constraint"].flatten()
 
+        inf_mask = (true_constraint == np.inf) | (pred_constraint == np.inf)
+        true_constraint = true_constraint[~inf_mask]
+        pred_constraint = pred_constraint[~inf_mask]
+
         constraint_dict = {
             "constraint/rmse": rmse(true_constraint, pred_constraint),
             "constraint/mse": mse(true_constraint, pred_constraint),
             "constraint/mae": mae(true_constraint, pred_constraint),
-            # "constraint/r2": r2(true_constraint, pred_constraint),
             "true/constraint": true_constraint.mean(),
             "true/constraint_std": true_constraint.std(),
         }

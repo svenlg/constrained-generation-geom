@@ -1,5 +1,6 @@
 import os
 import re
+import numpy as np
 import torch
 import tempfile
 import subprocess
@@ -9,6 +10,12 @@ import logging
 from rdkit import RDLogger
 RDLogger.DisableLog('rdApp.*')
 logging.getLogger("rdkit").setLevel(logging.CRITICAL)
+
+LOWEST_ALLOWED_ENERGY = -40
+MAX_ALLOWED_ENERGY = 40
+
+LOWEST_ALLOWED_DIPOLE = 0
+MAX_ALLOWED_DIPOLE = 40
 
 def extract_dipole(output: str, verbose: bool = True) -> float:
     """
@@ -31,7 +38,10 @@ def extract_dipole(output: str, verbose: bool = True) -> float:
         return 0
     
     # The last group is the total dipole in Debye
-    return float(match.group(4))
+    dipole = float(match.group(4))
+    if dipole < LOWEST_ALLOWED_DIPOLE or dipole > MAX_ALLOWED_DIPOLE:
+        dipole = np.inf
+    return float(dipole)
 
 def extract_homo_lumo(output: str, verbose: bool = True) -> tuple:
     """
@@ -64,6 +74,8 @@ def extract_energy(output: str, verbose: bool = True) -> float:
         if "total energy" in line:
             try:
                 energy = float(line.split()[-3])
+                if energy < LOWEST_ALLOWED_ENERGY or energy > MAX_ALLOWED_ENERGY:
+                    energy = np.inf
             except ValueError:
                 energy = None
             return energy
@@ -166,3 +178,4 @@ def compute_xtb(molecule, format_type, verbose:bool = True):
 
         # TemporaryDirectory cleans up automatically
         return rtn_dict
+
