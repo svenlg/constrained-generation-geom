@@ -69,21 +69,17 @@ def pred_vs_real(rd_mols: List, pred_dict: dict, reward: str, constraint: str) -
         "true/reward_std": true_reward.std(),
     }
 
-    if constraint == "score":
-        true_constraint = df_true[constraint].to_numpy()
-        pred_constraint = pred_dict["constraint"].flatten()
+    true_constraint = df_true[constraint].to_numpy()
+    pred_constraint = pred_dict["constraint"].flatten()
 
-        constraint_dict = {
-            "constraint/rmse": rmse(true_constraint, pred_constraint),
-            "constraint/mse": mse(true_constraint, pred_constraint),
-            "constraint/mae": mae(true_constraint, pred_constraint),
-            "true/constraint": true_constraint.mean(),
-            "true/constraint_std": true_constraint.std(),
+    constraint_dict = {
+        "constraint/rmse": rmse(true_constraint, pred_constraint),
+        "constraint/mse": mse(true_constraint, pred_constraint),
+        "constraint/mae": mae(true_constraint, pred_constraint),
+        "true/constraint": true_constraint.mean(),
+        "true/constraint_std": true_constraint.std(),
         }
-    else:
-        true_constraint = None
-        constraint_dict = {}
-
+    
     return_dict = {**reward_dct, **constraint_dict}
 
     return return_dict, true_reward, true_constraint
