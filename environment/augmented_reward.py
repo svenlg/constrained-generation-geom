@@ -281,7 +281,7 @@ class AugmentedReward:
         if self.last_grad_norm_penalty is not None:
             ret_dict['grad_norm/penalty'] = float(self.last_grad_norm_penalty)
         if self.last_grad_norm_full is not None and self.last_grad_norm_penalty is not None:
-            ret_dict['grad_norm/percentage_penalty'] = float((self.last_grad_norm_penalty / (self.last_grad_norm_full + 1e-10)) if self.last_grad_norm_full is not None else 0.0),
+            ret_dict['grad_norm/percentage_penalty'] = float(self.last_grad_norm_penalty / (self.last_grad_norm_full + 1e-10))
         return ret_dict
 
     def get_reward_constraint(self) -> dict:
