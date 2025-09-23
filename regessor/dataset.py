@@ -23,12 +23,7 @@ class GenDataset(Dataset):
         self.experiment = experiment
         self.split = split
         self.max_nodes = max_nodes
-        if property == "dipole_zero":
-            self.property = "dipole"
-            self.set_zero_dipole = True
-        else:
-            self.property = property
-            self.set_zero_dipole = False
+        self.property = property
 
         self.path = f"data/{experiment}"
         self.mol_path = self.path + "/molecules"
@@ -56,10 +51,6 @@ class GenDataset(Dataset):
             idx = self.df.sample().index[0]
 
         target_value = torch.tensor(self.df.iloc[idx][self.property], dtype=torch.float32)
-        if self.set_zero_dipole:
-            target_value = torch.tensor(0.0, dtype=torch.float32) if not self.df.iloc[idx]['all_atoms_connected'] else target_value
-        if self.property == "score": # punish disconnected graphs
-            target_value = torch.tensor(1.0, dtype=torch.float32) if not self.df.iloc[idx]['all_atoms_connected'] else target_value
 
         return mol, target_value
 

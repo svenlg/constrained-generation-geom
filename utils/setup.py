@@ -22,10 +22,10 @@ def parse_arguments():
     parser.add_argument('--flow_model', type=str, choices=flowmol_choices,
                         help='pretrained model to be used')
     # Reward and Constraint
-    reward_choices = ['dipole', 'score', 'dipole_zero']
-    parser.add_argument("--reward", type=str, choices=reward_choices,
+    choices = ['dipole', 'score', 'energy', 'sascore']
+    parser.add_argument("--reward", type=str, choices=choices,
                         help="Override reward in config")
-    parser.add_argument("--constraint", type=str, choices=reward_choices,
+    parser.add_argument("--constraint", type=str, choices=choices,
                         help="Override reward in config")
     parser.add_argument("--bound", type=float,
                         help="Override bound in config")

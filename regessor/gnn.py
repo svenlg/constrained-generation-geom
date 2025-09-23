@@ -20,7 +20,7 @@ class GNN(nn.Module):
 
         self.head = nn.Linear(hidden_dim, 1)
 
-        if self.property in ("dipole", "dipole_zero"):
+        if self.property == "dipole":
             self.output = nn.Softplus() # dipole is non-negative
             self.tau = 1.0
         elif self.property == "score": # score is between 0 and 1

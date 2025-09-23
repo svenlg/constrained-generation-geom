@@ -292,7 +292,7 @@ def train(
 def parse_args():
     p = argparse.ArgumentParser("Train GNN (plain PyTorch + DGL)")
     p.add_argument("--property", type=str, required=True,
-                   help="One of: score, energy, homo, lumo, homolumo_gap, dipole, dipole_zero")
+                   help="One of: score, energy, homo, lumo, homolumo_gap, dipole, sascore")
     p.add_argument("-e", "--experiment", type=str, required=True, help="Path to data folder (same as before)")
     model_type_choices = ["egnn", "gnn"]
     p.add_argument("-m", "--model_type", type=str, required=True, choices=model_type_choices, help="One of: egnn, gnn")

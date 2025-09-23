@@ -161,7 +161,7 @@ class EGNN(nn.Module):
 
         # Head
         self.head = nn.Linear(hidden_dim, 1)
-        if self.property in ("dipole", "dipole_zero"):
+        if self.property == "dipole":
             self.output = nn.Softplus()
             self.tau = 1.0
         elif self.property == "score":

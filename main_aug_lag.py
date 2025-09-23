@@ -133,7 +133,7 @@ def main():
     config.rc_finetune.freq = config.rc_finetune.get("freq", 0)
 
     num_iterations = config.total_steps // lagrangian_updates
-    plotting_freq = 10
+    plotting_freq = 3
 
     baseline = args.baseline
     if baseline:
