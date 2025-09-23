@@ -14,7 +14,7 @@ from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, SequentialLR
 
 from dgl.dataloading import GraphDataLoader
 
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 
 from regessor import GNN, EGNN, make_loaders  
 
@@ -87,13 +87,11 @@ def evaluate(model: nn.Module, loader: GraphDataLoader, device: torch.device,
 
     mae = mean_absolute_error(tgts, preds)
     rmse = float(np.sqrt(mean_squared_error(tgts, preds)))
-    r2 = r2_score(tgts, preds)
 
     return {
         "loss": float(np.mean(losses)),
         "mae": float(mae),
         "rmse": float(rmse),
-        "r2": float(r2)
     }
 
 
@@ -230,8 +228,7 @@ def train(
             f"train/loss={train_loss:.4f} | "
             f"val/loss={val_loss:.4f} | "
             f"val/mae={val_metrics['mae']:.4f} | "
-            f"val/rmse={val_metrics['rmse']:.4f} | "
-            f"val/r2={val_metrics['r2']:.4f}",
+            f"val/rmse={val_metrics['rmse']:.4f}",
             flush=True
         )
 
@@ -243,7 +240,6 @@ def train(
             "val/loss": val_loss,
             "val/mae": val_metrics["mae"],
             "val/rmse": val_metrics["rmse"],
-            "val/r2": val_metrics["r2"],
             "lr": optimizer.param_groups[0]["lr"],
         })
 
@@ -279,15 +275,13 @@ def train(
 
     test_metrics = evaluate(model, test_loader, device, loss_fn)
     print(
-        f"[TEST] loss={test_metrics['loss']:.4f} | mae={test_metrics['mae']:.4f} | "
-        f"rmse={test_metrics['rmse']:.4f} | r2={test_metrics['r2']:.4f}"
+        f"[TEST] loss={test_metrics['loss']:.4f} | mae={test_metrics['mae']:.4f} | rmse={test_metrics['rmse']:.4f}"
     )
     if use_wandb:
         wandb.log({
             "test/loss": test_metrics["loss"],
             "test/mae": test_metrics["mae"],
             "test/rmse": test_metrics["rmse"],
-            "test/r2": test_metrics["r2"],
         })
         wandb.finish()
 
