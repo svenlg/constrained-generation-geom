@@ -37,8 +37,6 @@ def parse_arguments():
                         help="Override lagrangian_updates in config")
     parser.add_argument("--rho_init", type=float,
                         help="Override rho_init in config")
-    parser.add_argument("--rho_max", type=float,
-                        help="Override rho_max in config")
     parser.add_argument("--eta", type=float,
                         help="Override eta in config")
     parser.add_argument("--baseline", action='store_true',
@@ -118,8 +116,6 @@ def update_config_with_args(config, args):
     # Augmented Lagrangian Parameters
     if args.rho_init is not None:
         config.augmented_lagrangian.rho_init = args.rho_init
-    if args.rho_max is not None:
-        config.augmented_lagrangian.rho_max = args.rho_max
     if args.eta is not None:
         config.augmented_lagrangian.eta = args.eta
     if args.lagrangian_updates is not None:

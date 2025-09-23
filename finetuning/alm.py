@@ -13,7 +13,6 @@ class AugmentedLagrangian:
         ):
         # Config
         self.rho_init = config.get("rho_init", 0.5)
-        self.rho_max = config.rho_max
         lambda_min = config.get("lambda_min", -10.0)
         self.lambda_min = -abs(lambda_min)
         self.tau = config.get("tau", 0.99)
@@ -58,7 +57,6 @@ class AugmentedLagrangian:
 
     def update_rho(self):
         # Update rho
-        # rho_k+1 = min(eta * rho_k, rho_max)
         if self.old_contraction_value is None:
             rho = self.rho
             print(f"k = 1")
@@ -69,7 +67,6 @@ class AugmentedLagrangian:
             rho = self.eta * self.rho
             print(f"eta * rho")
         self.old_contraction_value = self.contraction_value
-        # rho = min(rho, self.rho_max)
         return rho
 
     def update_lambda_rho(self, new_samples):
