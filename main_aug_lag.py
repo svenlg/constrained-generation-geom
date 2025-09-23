@@ -59,8 +59,6 @@ def load_regressor(config: OmegaConf, device: torch.device) -> nn.Module:
             "num_bond_types": K_e,
             "hidden_dim": state["config"]["hidden_dim"],
             "depth": state["config"]["depth"],
-            "use_gumbel": state["config"]["use_gumbel"],
-            "equivariant": state["config"]["equivariant"],
         }
         model = RCModel(property=property, config=config, model_config=model_config)
 
@@ -286,6 +284,10 @@ def main():
         logs.update(log) # lambda, rho, expected_constraint
         wandb.log(logs)
 
+    # Save the model if enabled
+    if args.save_model and not args.debug:
+        models_list = []
+
     #### AUGMENTED LAGRANGIAN - BEGIN ####
     total_steps_made = 0
     for k in range(1, lagrangian_updates + 1):
@@ -420,6 +422,10 @@ def main():
         )
         del tmp_model
 
+            # Save the model if enabled
+        if args.save_model and not args.debug:
+            models_list.append(copy.deepcopy(gen_model.cpu().state_dict()))
+
         alm.update_lambda_rho(dgl_mols)
         del dgl_mols, rd_mols, trainer
     
@@ -459,6 +465,8 @@ def main():
 
     # Save the model if enabled
     if args.save_model and not args.debug:
+        for idx, state_dict in enumerate(models_list):
+            torch.save(state_dict, save_path / Path(f"model_lu{idx+1}.pth"))
         torch.save(gen_model.cpu().state_dict(), save_path / Path("final_model.pth"))
         print(f"Model saved to {save_path}", flush=True)
 

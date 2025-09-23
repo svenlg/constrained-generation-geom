@@ -135,10 +135,8 @@ class EGNN(nn.Module):
         num_bond_types: int,
         hidden_dim: int = 256,
         depth: int = 6,
-        use_gumbel: bool = True, # just in here for compatibility
         gumbel_tau: float = 1.0,
         gumbel_hard: bool = True,
-        equivariant: bool = True, # just in here for compatibility
         rbf_k: int = 16,
     ):
         super().__init__()
