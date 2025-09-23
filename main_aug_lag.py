@@ -155,7 +155,7 @@ def main():
         if not constrain_geq_bound: # we have relu - bound is handled in constraint function
             config.constraint.bound = 0.0
         config.constraint.fine_tuning = False
-    elif config.constraint.fn == "score":
+    elif config.constraint.fn in ["score", "energy", "sascore"]:
         constraint_model, constraint_model_config = load_regressor(config.constraint, device=device)
         if config.rc_finetune is not None and config.constraint.fine_tuning:
             constraint_finetuner = setup_fine_tuner(config.constraint.fn, constraint_model.gnn, config.rc_finetune)
