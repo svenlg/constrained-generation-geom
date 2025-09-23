@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 from true_rc.posebuster_scorer import posebusters_score
 from true_rc.xtb_calc import compute_xtb
+from true_rc.sascore import get_sacore
 from typing import List
 
 import logging
@@ -18,16 +19,24 @@ def get_rc_properties(
         return_dict: bool = False,
         ) -> List[dict]:
     
+    ##### Possible Constraint Calculations
     if constraint == "score" :
-        # Get PoseBusters Feedbac
+        # Get PoseBusters Feedback
         tmp_time = time.time()
         df_scores = posebusters_score(rd_mols, disconnected=True)
         if verbose:
             print(f"PoseBusters time: {time.time() - tmp_time:.2f} seconds", flush=True)
+    elif constraint == "sascore":
+        # Get SAScore Feedback
+        tmp_time = time.time()
+        df_scores = get_sacore(rd_mols)
+        if verbose:
+            print(f"SAScore time: {time.time() - tmp_time:.2f} seconds", flush=True)
     else:
         df_scores = pd.DataFrame({"score": [0.0]*len(rd_mols)})
 
-    if reward == "dipole":
+    ##### Possible Reward Calculations
+    if reward == "dipole" or constraint == "energy":
         # XTB-Calulations
         tmp_time = time.time()
         properties = []
