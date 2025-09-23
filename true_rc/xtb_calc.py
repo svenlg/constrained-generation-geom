@@ -74,8 +74,6 @@ def extract_energy(output: str, verbose: bool = True) -> float:
         if "total energy" in line:
             try:
                 energy = float(line.split()[-3])
-                if energy < LOWEST_ALLOWED_ENERGY or energy > MAX_ALLOWED_ENERGY:
-                    energy = np.inf
             except ValueError:
                 energy = None
             return energy

@@ -1,6 +1,7 @@
 import os
+import numpy as np
 import pandas as pd
-from typing import Dict, List, Optional, Tuple
+from typing import Tuple
 
 import torch
 from torch.utils.data import Dataset
@@ -45,6 +46,9 @@ class GenDataset(Dataset):
 
     def __getitem__(self, idx: int) -> Tuple[dgl.DGLGraph, torch.Tensor]:
         while True:
+            if np.isnan(self.df.iloc[idx][self.property]):
+                idx = self.df.sample().index[0]
+                continue
             mol = self._load_mols(idx)
             num_atoms = mol.num_nodes()
             if num_atoms <= self.max_nodes:
