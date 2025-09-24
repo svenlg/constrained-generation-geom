@@ -88,7 +88,7 @@ def main():
     if config.experiment is not None and "sweep" in config.experiment:
         run_name = f"lu{config.augmented_lagrangian.lagrangian_updates}_rl{config.reward_lambda}_rho{config.augmented_lagrangian.rho_init}_seed{config.seed}"
     elif config.experiment is not None:
-        run_name = f"{run_id}_{config.experiment}"
+        run_name = f"{run_id}_{config.experiment}_{args.seed}"
     else:
         run_name = f"{run_id}_r{config.reward.model_type}_c{config.constraint.model_type}{config.constraint.bound}_rf{config.reward_lambda}_lu{config.augmented_lagrangian.lagrangian_updates}"
     print(f"Running: {run_name}")
@@ -432,32 +432,29 @@ def main():
     # Finish wandb run
     if use_wandb:
         wandb.finish()
+
+    full_stats[0]['loss'] = full_stats[1]['loss']
+    df_al = pd.DataFrame.from_records(full_stats)
+    df_alm = pd.DataFrame.from_dict(al_stats)
     
     if not args.debug:
         # Save configs is config path
         config_save_path = save_path / Path("configs")
         config_save_path.mkdir(parents=True, exist_ok=True)
         OmegaConf.save(config, config_save_path / Path("config.yaml"))
-        OmegaConf.save(reward_model_config, config_save_path / Path("reward_model_config.yaml"))
-        if config.constraint.fn == "score":
-            OmegaConf.save(constraint_model_config, config_save_path / Path("constraint_model_config.yaml"))
-        full_stats[0]['loss'] = full_stats[1]['loss']
-        df_al = pd.DataFrame.from_records(full_stats)
+        # OmegaConf.save(reward_model_config, config_save_path / Path("reward_model_config.yaml"))
+        # OmegaConf.save(constraint_model_config, config_save_path / Path("constraint_model_config.yaml"))
         df_al.to_csv(save_path / "full_stats.csv", index=False)
-        df_alm = pd.DataFrame.from_dict(al_stats)
         df_alm.to_csv(save_path / "al_stats.csv", index=False)
 
     # Plotting if enabled
     if args.save_plots and not args.debug:
         from utils.plotting import plot_graphs
         # Plot rewards and constraints
-        full_stats[0]['loss'] = full_stats[1]['loss']
-        df = pd.DataFrame.from_records(full_stats)
-        tmp_data = [df['total_reward'], df['reward'], df['constraint'], df['constraint_violations'], df['loss']]
+        tmp_data = [df_al['total_reward'], df_al['reward'], df_al['constraint'], df_al['constraint_violations'], df_al['loss']]
         tmp_titles = ["Total Reward", "Reward", "Constraint", "Constraint Violations", "Loss"]
         plot_graphs(tmp_data, tmp_titles, save_path=save_path / Path("full_stats.png"), save_freq=plotting_freq)
         # Plot lambda, rho and expected constraint
-        df_alm = pd.DataFrame.from_dict(al_stats)
         tmp_data = [df_alm["lambda"], df_alm["rho"], df_alm["expected_constraint"]]
         tmp_titles = ["Lambda", "Rho", "Expected Constraint"]
         plot_graphs(tmp_data, tmp_titles, save_path=save_path / Path("al_stats.png"))

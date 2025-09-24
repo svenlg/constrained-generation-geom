@@ -1,8 +1,5 @@
 import numpy as np
-from pathlib import Path
 import matplotlib.pyplot as plt
-import matplotlib.animation as animation
-from IPython.display import HTML
 
 
 def plot_graphs(data_list, titles, save_path=None, save_freq=1):
