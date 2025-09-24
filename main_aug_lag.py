@@ -449,16 +449,19 @@ def main():
 
     # Plotting if enabled
     if args.save_plots and not args.debug:
-        from utils.plotting import plot_graphs
-        # Plot rewards and constraints
-        tmp_data = [df_al['total_reward'], df_al['reward'], df_al['constraint'], df_al['constraint_violations'], df_al['loss']]
-        tmp_titles = ["Total Reward", "Reward", "Constraint", "Constraint Violations", "Loss"]
-        plot_graphs(tmp_data, tmp_titles, save_path=save_path / Path("full_stats.png"), save_freq=plotting_freq)
-        # Plot lambda, rho and expected constraint
-        tmp_data = [df_alm["lambda"], df_alm["rho"], df_alm["expected_constraint"]]
-        tmp_titles = ["Lambda", "Rho", "Expected Constraint"]
-        plot_graphs(tmp_data, tmp_titles, save_path=save_path / Path("al_stats.png"))
-        print(f"Saved plots to {save_path}", flush=True)
+        try:
+            from utils.plotting import plot_graphs
+            # Plot rewards and constraints
+            tmp_data = [df_al['total_reward'], df_al['reward'], df_al['constraint'], df_al['constraint_violations'], df_al['loss']]
+            tmp_titles = ["Total Reward", "Reward", "Constraint", "Constraint Violations", "Loss"]
+            plot_graphs(tmp_data, tmp_titles, save_path=save_path / Path("full_stats.png"), save_freq=plotting_freq)
+            # Plot lambda, rho and expected constraint
+            tmp_data = [df_alm["alm/lambda"], df_alm["alm/rho"], df_alm["alm/expected_constraint"]]
+            tmp_titles = ["Lambda", "Rho", "Expected Constraint"]
+            plot_graphs(tmp_data, tmp_titles, save_path=save_path / Path("al_stats.png"))
+            print(f"Saved plots to {save_path}", flush=True)
+        except Exception as e:
+            print(f"Could not save plots: {e}", flush=True)
 
     # Save the model if enabled
     if args.save_model and not args.debug:

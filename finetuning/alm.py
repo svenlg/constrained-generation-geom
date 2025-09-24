@@ -43,7 +43,8 @@ class AugmentedLagrangian:
         self.g = self.exp_constraint - self.filter_bound
         self.pred_g = self.gnn_constraint.detach().cpu().item() - self.filter_bound
         # self.exp_constraint = torch.mean(constraint).detach().cpu().item() - self.bound
-        self.contraction_value = min(-self.lambda_/self.rho , self.g)
+        if self.rho > 0.0:
+            self.contraction_value = min(-self.lambda_/self.rho , self.g)
         return copy.deepcopy(self.g)
 
     def update_lambda(self, new_samples):

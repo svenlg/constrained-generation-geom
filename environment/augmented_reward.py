@@ -85,7 +85,10 @@ class AugmentedReward:
         tmp_lambda = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.lambda_
         tmp_rho = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.rho_
         tmp_bound = torch.ones_like(self.tmp_constraint) * self.filter_bound
-        g = self.tmp_constraint - tmp_bound - tmp_lambda / tmp_rho
+        if self.rho_ > 0.0:
+            g = self.tmp_constraint - tmp_bound - tmp_lambda / tmp_rho
+        else:
+            g = torch.tensor(0.0, device=self.tmp_constraint.device)
         return (tmp_rho * torch.clamp(g, min=0.0)).mean()
     
     def _penalty_mean(self) -> torch.Tensor:
@@ -93,7 +96,10 @@ class AugmentedReward:
         tmp_lambda = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.lambda_
         tmp_rho = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.rho_
         tmp_bound = torch.ones_like(self.tmp_constraint) * self.filter_bound
-        g = self.tmp_constraint - tmp_bound - tmp_lambda / tmp_rho
+        if self.rho_ > 0.0:
+            g = self.tmp_constraint - tmp_bound - tmp_lambda / tmp_rho
+        else:
+            g = torch.tensor(0.0, device=self.tmp_constraint.device)
         relu_g = torch.clamp(g, min=0.0)
         return ((tmp_rho / 2.0) * (relu_g ** 2)).mean()
 
@@ -171,8 +177,10 @@ class AugmentedReward:
         reward = self.tmp_reward.mean()
         constraint = self.tmp_constraint.mean()
 
-        g = constraint - self.bound - self.lambda_ / self.rho_
-
+        if self.rho_ > 0.0:
+            g = constraint - self.bound - self.lambda_ / self.rho_
+        else:
+            g = torch.tensor(0.0, device=self.tmp_constraint.device, requires_grad=True)
         self.tmp_total = ( reward - (self.rho_ / 2.0) * torch.clamp(g, min=0.0) ** 2 ).mean()
         return self.alpha * self.tmp_total
 
@@ -242,7 +250,8 @@ class AugmentedReward:
                 # per-term grad norms
                 self.last_grad_norm_reward = self._autograd_norm(self.tmp_reward.mean(), inputs)
                 self.last_grad_norm_constraint = self._autograd_norm(self.tmp_constraint.mean(), inputs)
-                self.last_grad_norm_penalty = self._autograd_norm(self._penalty_mean(), inputs)
+                if self.rho_ > 0:
+                    self.last_grad_norm_penalty = self._autograd_norm(self._penalty_mean(), inputs)
 
                 # true objective gradient via backward ---
                 tmp_augmented_reward.backward()
