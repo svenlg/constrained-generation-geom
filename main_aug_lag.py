@@ -218,6 +218,7 @@ def main():
         bound = config.constraint.bound,
         config = config.augmented_reward,
         device = device,
+        baseline = baseline
     )
     
     # Set the initial lambda and rho
