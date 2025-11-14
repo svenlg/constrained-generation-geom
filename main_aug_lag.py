@@ -298,7 +298,7 @@ def main():
         log = alm.get_statistics()
         al_stats.append(log)
 
-        # Set the lambda and rho in the reward functional
+        # Set the lambda and rho in the augmented reward
         augmented_reward.set_lambda_rho(lambda_, rho_)
 
         # Print lambda and rho for the current round
@@ -422,13 +422,13 @@ def main():
         )
         del tmp_model
 
-            # Save the model if enabled
+        # Save the model if enabled
         if args.save_model and not args.debug:
             models_list.append(copy.deepcopy(gen_model.cpu().state_dict()))
 
         alm.update_lambda_rho(dgl_mols)
         del dgl_mols, rd_mols, trainer
-    
+
     # Finish wandb run
     if use_wandb:
         wandb.finish()

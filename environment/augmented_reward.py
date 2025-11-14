@@ -294,11 +294,20 @@ class AugmentedReward:
         return ret_dict
 
     def get_reward_constraint(self) -> dict:
+        # TODO: check if this returns the correct values
         pred_reward = self.gnn_reward.clone().detach().cpu().numpy()
         pred_constraint = self.gnn_constraint.clone().detach().cpu().numpy()
         return {
             "reward": pred_reward,
             "constraint": pred_constraint,
+        }
+
+    def get_individual_reward_constraint(self) -> dict:
+        reward = self.tmp_reward.clone().detach().cpu().numpy()
+        constraint = self.tmp_constraint.clone().detach().cpu().numpy()
+        return {
+            "reward": reward,
+            "constraint": constraint,
         }
 
 

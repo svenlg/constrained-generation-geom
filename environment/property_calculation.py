@@ -1,20 +1,25 @@
 import dgl
 import torch
-from torch_geometric.data import Data
 
 import dxtb
 from rdkit import Chem
-from dxtb.calculators import GFN1Calculator, GFN2Calculator
+from dxtb.calculators import GFN1Calculator
 from dxtb.components.field import ElectricField
 
 dxtb.timer.disable()
 
+LOWEST_ALLOWED_ENERGY = -40
+MAX_ALLOWED_ENERGY = 40
+
+LOWEST_ALLOWED_DIPOLE = 0
+MAX_ALLOWED_DIPOLE = 40
+
 # FlowMol uses a different convention for atom types idx compared to QM9 and GEOM datasets.
 # Se: is in there since we sample with CTMC the "non-type" is Se.
 # Other FlowMol sampling dont use Se.
-atom_type_list = [
-    "H", "C", "N", "O", "F", "Se",
-]
+# atom_type_list = [
+#     "H", "C", "N", "O", "F", "Se",
+# ]
 
 atom_type_list_qm9 = [
     "C", "H", "N", "O", "F", "Se",
@@ -26,6 +31,20 @@ atom_type_list_geom = [
 
 atom_type_to_atomic_number = {
     "H": 1, "C": 6, "N": 7, "O": 8, "F": 9, "P": 15, "S": 16, "Cl": 17, "Br": 35, "I": 53, "Se": 34,
+}
+
+single_atom_energies = {
+    "H": -0.4014294743537903,
+    "C": -1.7411398887634277,
+    "N": -2.898886203765869,
+    "O": -4.352645397186279,
+    "F": -4.9969377517700195,
+    "P": -2.4250621795654297,
+    "S": -3.5359158515930176,
+    "Cl": -4.166351318359375,
+    "Br": -3.8180367946624756,
+    "I": -3.885754346847534,
+    "Se": -3.222712755203247,
 }
 
 bond_type_map = [
@@ -58,7 +77,7 @@ def safe_calc(calc_fn, pos, return_grad, device):
     try:
         val = calc_fn(pos)
         if return_grad:
-            val_grad = torch.autograd.grad(val, pos)[0]
+            val_grad = torch.autograd.grad(val, pos, retain_graph=False, create_graph=False, allow_unused=False)[0]
             # check_tensor(val_grad)
         else:
             val_grad = None
@@ -66,6 +85,7 @@ def safe_calc(calc_fn, pos, return_grad, device):
         print(f"Error in dxtb calculation: {e}", flush=True)
         val = torch.tensor(float("inf"), device=device)
         val_grad = torch.zeros_like(pos, device=device) if return_grad else None
+
     return val, val_grad
 
 def compute(molecule, atom_type_map, property, reward_lambda, device, return_grad=False):
@@ -79,6 +99,8 @@ def compute(molecule, atom_type_map, property, reward_lambda, device, return_gra
     positions = molecule.ndata['x_t']
     positions = positions.clone().detach().requires_grad_(True)
 
+    base_energy = sum([single_atom_energies[atom_type_map[atom]] for atom in atomic_types_idx])
+
     # Initialize Electric Field
     dd = {"dtype": torch.float32, "device": torch.device(device)}
     field = torch.tensor([0.0, 0.0, 0.0], device=device, dtype=torch.float32, requires_grad=True)
@@ -90,9 +112,15 @@ def compute(molecule, atom_type_map, property, reward_lambda, device, return_gra
     if property == "energy":
         def calc_energy(p): return calc.energy(p)
         val, val_grad = safe_calc(calc_energy, positions, return_grad, device)
+        if val < LOWEST_ALLOWED_ENERGY or val > MAX_ALLOWED_ENERGY:
+            val = torch.tensor(float("inf"), device=device)
+            val_grad = torch.zeros_like(positions, device=device) if return_grad else None
     elif property == "dipole":
         def dipole_norm(p): return torch.norm(calc.dipole(p))
         val, val_grad = safe_calc(dipole_norm, positions, return_grad, device)
+        if val < LOWEST_ALLOWED_DIPOLE or val > MAX_ALLOWED_DIPOLE:
+            val = torch.tensor(float("inf"), device=device)
+            val_grad = torch.zeros_like(positions, device=device) if return_grad else None
     elif property == "forces":
         def calc_force(p): return torch.norm(calc.forces(p))
         val, val_grad = safe_calc(calc_force, positions, return_grad, device)
@@ -101,6 +129,7 @@ def compute(molecule, atom_type_map, property, reward_lambda, device, return_gra
 
     # Reset calculator
     calc.reset()
+    del calc, ef
 
     # val = reward_lambda * val.clone().detach()
     val = val.clone().detach()
@@ -108,37 +137,6 @@ def compute(molecule, atom_type_map, property, reward_lambda, device, return_gra
         val_grad = reward_lambda * val_grad.clone().detach()
 
     return val, val_grad
-
-def sa_score(molecule, model, reward_lambda, device, return_grad=False):
-    """
-    Compute the SAScore gradient for a molecule using a pre-trained model.
-    """
-    model.eval()
-    model.to(device)
-    x = molecule.ndata['a_t'].argmax(dim=1)  # shape: [n] 
-    # QM9:     C at index 1 and H at index 0 
-    # FLowMol: C at index 0 and H at index 1
-    # --> swap the indices
-    x_tmp = x.clone().detach()
-    x[x_tmp == 0] = 1  # H -> C
-    x[x_tmp == 1] = 0  # C -> H
-    x = x.long().to(device)  # shape: [n]
-    pos = molecule.ndata['x_t']  # shape: [n, 3]
-    batch = torch.zeros(pos.shape[0], dtype=torch.long, device=device)  # shape: [n]
-    src, dst = molecule.edges()
-    edge_index = torch.stack([src, dst], dim=0)  # shape: [2, m]
-    data = Data(x=x, edge_index=edge_index, pos=pos, batch=batch)
-    data = data.to(device)
-    if return_grad:
-        pos.requires_grad_(True)
-    val = model(data)
-    if return_grad:
-        grad = torch.autograd.grad(val, pos, retain_graph=False)[0]
-        grad = reward_lambda * grad.clone().detach()
-    else:
-        grad = None
-    
-    return val.clone().detach(), grad
 
 def compute_property_value_and_grad(mol, property, atom_type_map, reward_lambda, device, model, return_grad):
     if property in ["energy", "dipole", "forces"]:
@@ -154,20 +152,10 @@ def compute_property_value_and_grad(mol, property, atom_type_map, reward_lambda,
         val = torch.tensor(0.0, device=device)
         grad = torch.zeros_like(mol.ndata['x_t'], device=device) if return_grad else None
         return val, grad
-    elif property == "sascore":
-        assert model is not None, "Model must be provided for SAScore calculation"
-        return sa_score(
-            molecule=mol,
-            model=model,
-            reward_lambda=reward_lambda,
-            device=device,
-            return_grad=return_grad,
-        )
     else:
         raise ValueError(f"Unknown property: {property}")
 
-
-def compute_property_stats(molecules, property, device, model=None):
+def compute_property_stats(molecules, property, device, model=None, full_output=False):
     properties = []
     atom_type_map = get_atom_type_map(molecules)
 
@@ -180,16 +168,22 @@ def compute_property_stats(molecules, property, device, model=None):
     properties = torch.stack(properties)
     finite_mask = torch.isfinite(properties)
     properties_finite = properties[finite_mask].detach().cpu()
-    return {
-        "mean": properties_finite.mean().item(),
-        "std": properties_finite.std().item(),
-        "max": properties_finite.max().item(),
-        "min": properties_finite.min().item(),
-        "num_invalid": len(properties) - len(properties_finite),
-        "median": properties_finite.median().item(),
-        "all_finite": properties_finite,
-    }
 
+    empyt_value = 0
+    if property == "energy":
+        empyt_value = LOWEST_ALLOWED_ENERGY
+    if full_output:
+        return properties.detach().cpu()
+    else:   
+        return {
+            "mean": properties_finite.mean().item() if properties_finite.numel() > 0 else empyt_value,
+            "std": properties_finite.std().item() if properties_finite.numel() > 1 else 0,
+            "max": properties_finite.max().item() if properties_finite.numel() > 0 else empyt_value,
+            "min": properties_finite.min().item() if properties_finite.numel() > 0 else empyt_value,
+            "median": properties_finite.median().item() if properties_finite.numel() > 0 else empyt_value,
+            "num_invalid": len(properties) - len(properties_finite),
+            "all_finite": properties_finite,
+        }
 
 def compute_property_grad(molecules, property, reward_lambda, device, model=None):
     properties, gradients = [], []
@@ -203,3 +197,4 @@ def compute_property_grad(molecules, property, reward_lambda, device, model=None
         gradients.append(grad)
 
     return properties, gradients
+

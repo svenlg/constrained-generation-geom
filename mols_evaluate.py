@@ -42,13 +42,6 @@ def numeric_key(name: str) -> int:
     m = re.search(r"\d+", name)
     return int(m.group()) if m else -1
 
-def best_device() -> torch.device:
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
-
 def load_regressor(config: OmegaConf, device: torch.device):
     import os.path as osp
     K_x, K_a, K_c, K_e = 3, 10, 6, 5
@@ -86,10 +79,9 @@ def eval_saved_samples(
     root: str,
     experiment: str,
     seed: int,
-    config_path: str = "configs/augmented_lagrangian.yaml",
     outdir: str = "eval",
 ):
-    device = best_device()
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     base = Path(root).expanduser().resolve() / f"{experiment}_{seed}"
     samples_dir = base / "samples"
@@ -99,6 +91,7 @@ def eval_saved_samples(
         die(f"Samples folder not found: {samples_dir}")
 
     # ---- load config + models ----
+    config_path = Path(root) / Path(experiment + f"_{seed}") / Path("config.yaml")
     cfg = OmegaConf.load(config_path)
 
     reward_model, _ = load_regressor(cfg.reward, device=device)
@@ -135,10 +128,10 @@ def eval_saved_samples(
 
         # ---- PREDICTED: via AugmentedReward ----
         _ = augmented_reward(dgl_batch)  # <--- REQUIRED CALL
-        pred_rc = augmented_reward.get_reward_constraint()  # <--- {'reward': tensor[N], 'constraint': tensor[N]}
+        pred_rc = augmented_reward.get_individual_reward_constraint()  # <--- {'reward': tensor[N], 'constraint': tensor[N]}
 
-        pred_reward_all = pred_rc["reward"].detach().cpu().numpy().reshape(-1)
-        pred_constraint_all = pred_rc["constraint"].detach().cpu().numpy().reshape(-1)
+        pred_reward_all = pred_rc["reward"].reshape(-1)
+        pred_constraint_all = pred_rc["constraint"].reshape(-1)
 
         # ---- Build RDKit mols (and mask invalid/disconnected if requested) ----
         rd_kept = []
@@ -161,8 +154,8 @@ def eval_saved_samples(
 
         keep_idx_np = np.array(keep_idx, dtype=int)
         pred_rc_masked = {
-            "reward": torch.as_tensor(pred_reward_all[keep_idx_np]),
-            "constraint": torch.as_tensor(pred_constraint_all[keep_idx_np]),
+            "reward": pred_reward_all[keep_idx_np],
+            "constraint": pred_constraint_all[keep_idx_np],
         }
 
         # ---- TRUE values vs predictions ----
@@ -242,7 +235,6 @@ if __name__ == "__main__":
     ap.add_argument("--experiment", default="0923_2305_al_dipole_energy",
                     help="Experiment name (default matches your example)")
     ap.add_argument("--seed", type=int, default=1, help="Seed suffix in folder name (default: 1)")
-    ap.add_argument("--config", default="configs/augmented_lagrangian.yaml", help="Config YAML path")
     ap.add_argument("--outdir", default="eval", help="Subfolder in experiment dir to write outputs")
     args = ap.parse_args()
 
@@ -250,6 +242,5 @@ if __name__ == "__main__":
         root=args.root,
         experiment=args.experiment,
         seed=args.seed,
-        config_path=args.config,
         outdir=args.outdir,
     )

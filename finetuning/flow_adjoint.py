@@ -163,8 +163,8 @@ def adj_matching_loss(v_base, v_fine, adj, sigma, LCT):
     sig = sigma.view(-1, 1, 1)  
     term_diff = (2.0 / (sig + eps)) * diff
     term_adj = sig * adj
-    term_difference = term_diff + term_adj
-    per_t = (term_difference ** 2).sum(dim=[1, 2])
+    term = term_diff + term_adj
+    per_t = (term ** 2).sum(dim=[1, 2])
     clipped = torch.clamp(per_t, max=LCT) if LCT > 0.0 else per_t
     loss = clipped.sum()
     return loss
@@ -175,14 +175,13 @@ def adj_matching_loss_list_of_dicts(v_base, v_fine, adj, sigma, LCT):
     eps = 1e-12
     loss = 0.0
     for i, feat in enumerate(['x', 'a', 'c', 'e']):
-    # for i, feat in enumerate(['x', 'a', 'e']):  # x: [T, N, 3], a: [T, N, K_a], c: [T, N, K_c], e: [T, E, K_e]
-        diff = v_fine[feat] - v_base[feat]                          # [T, ..., ...]
-        sig = sigma[:, i].view(-1, 1, 1)                            # [T,1,1]
-        term_diff = (2.0 / (sig + eps)) * diff                      # [T, ..., ...]
-        term_adj = sig * adj[feat]                                  # [T, ..., ...]
-        term = term_diff + term_adj                                 # [T, ..., ...]
-        per_t = (term ** 2).sum(dim=[1, 2])                         # [T]
-        clipped = torch.clamp(per_t, max=LCT) if LCT > 0.0 else per_t # [T]
+        diff = v_fine[feat] - v_base[feat]                  # [T, ..., ...]
+        sig = sigma[:, i].view(-1, 1, 1)                    # [T,1,1]
+        term_diff = (2.0 / (sig + eps)) * diff              # [T, ..., ...]
+        term_adj = sig * adj[feat]                          # [T, ..., ...]
+        term = term_diff + term_adj                         # [T, ..., ...]
+        per_t = (term ** 2).sum(dim=[1, 2])                 # [T]
+        clipped = torch.clamp(per_t, max=LCT) if LCT > 0.0 else per_t  # [T]
         loss = loss + clipped.sum() * loss_weights[feat]
     return loss
 
