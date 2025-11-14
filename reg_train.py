@@ -167,7 +167,7 @@ def train(
         if wandb_project is None:
             wandb_project = f"gnn-molecular-{property}"
         if wandb_name is None:
-            wandb_name = f"{run_id}_hd{hidden_dim}_d{depth}"
+            wandb_name = f"{run_id}_{model_type}_hd{hidden_dim}_d{depth}"
         wandb.init(project=wandb_project, name=wandb_name, config=config)
         sweep_id = wandb.run.sweep_id if wandb.run.sweep_id else None
         if sweep_id is not None:
@@ -195,7 +195,6 @@ def train(
             targets = targets.to(device)
 
             optimizer.zero_grad(set_to_none=True)
-
 
             preds = model(graphs).squeeze(-1)
             loss = loss_fn(preds, targets)
