@@ -15,16 +15,15 @@ from omegaconf import OmegaConf
 
 from utils import parse_arguments, update_config_with_args, set_seed, sampling
 from true_rc import pred_vs_real
-from regessor import setup_fine_tuner, finetune
 
 import dgl
 import flowmol
 
-from environment import AugmentedReward, wrapped_geometry_constraint
+from environment import AugmentedReward
 
 from finetuning import AugmentedLagrangian, AdjointMatchingFinetuningTrainerFlowMol
 
-from regessor import RCModel
+from regessor import GNN, EGNN
 
 # Load - Flow Model
 def setup_gen_model(flow_model: str, device: torch.device): 
@@ -41,7 +40,6 @@ def load_regressor(config: OmegaConf, device: torch.device) -> nn.Module:
     model_path = osp.join("pretrained_models", config.fn, config.model_type, config.date, "best_model.pt")
     state = torch.load(model_path, map_location=device)
     if config.model_type == "gnn":
-        property = state["config"]["property"]
         model_config = {
             "property": state["config"]["property"],
             "node_feats": K_a + K_c + K_x,
@@ -49,9 +47,8 @@ def load_regressor(config: OmegaConf, device: torch.device) -> nn.Module:
             "hidden_dim": state["config"]["hidden_dim"],
             "depth": state["config"]["depth"],
         }
-        model = RCModel(property=property, config=config, model_config=model_config)
+        model = GNN(**model_config).load_state_dict(state["model_state"])
     elif config.model_type == "egnn":
-        property = state["config"]["property"]
         model_config = {
             "property": state["config"]["property"],
             "num_atom_types": K_a,
@@ -60,12 +57,9 @@ def load_regressor(config: OmegaConf, device: torch.device) -> nn.Module:
             "hidden_dim": state["config"]["hidden_dim"],
             "depth": state["config"]["depth"],
         }
-        model = RCModel(property=property, config=config, model_config=model_config)
+        model = EGNN(**model_config).load_state_dict(state["model_state"])
 
-    filter_config = OmegaConf.to_container(config.filter_config)
-    model_config["filter_config"] = filter_config
-    model.gnn.load_state_dict(state["model_state"])
-    return model, OmegaConf.create(model_config)
+    return model
 
 def main():
     # Parse command line arguments
@@ -126,10 +120,6 @@ def main():
     traj_len = config.adjoint_matching.sampling.num_integration_steps
     finetune_steps = config.adjoint_matching.sampling.num_samples // config.adjoint_matching.batch_size
 
-    # Online fintuning
-    config.rc_finetune = config.get("rc_finetune", OmegaConf.create({}))
-    config.rc_finetune.freq = config.rc_finetune.get("freq", 0)
-
     num_iterations = config.total_steps // lagrangian_updates
     plotting_freq = 3
 
@@ -139,28 +129,16 @@ def main():
 
     # Setup - Gen Model
     base_model = setup_gen_model(config.flow_model, device=device)
-    gen_model = copy.deepcopy(base_model)
+    fine_model = copy.deepcopy(base_model)
 
     # Setup - Reward Functions
-    reward_model, reward_model_config = load_regressor(config.reward, device=device)
-    if config.rc_finetune is not None and config.reward.fine_tuning:
-        reward_finetuner = setup_fine_tuner(config.reward.fn, reward_model.gnn, config.rc_finetune)
+    reward_model = load_regressor(config.reward, device=device)
 
     # Setup - Constraint Functions
-    if config.constraint.fn == "geometry" and False:
-        constraint_model = wrapped_geometry_constraint(config.constraint)
-        constrain_geq_bound = True if config.constraint.get("reduction", "min") not in ["relu", "relu_mean"] else False
-        if not constrain_geq_bound: # we have relu - bound is handled in constraint function
-            config.constraint.bound = 0.0
-        config.constraint.fine_tuning = False
-    elif config.constraint.fn in ["score", "energy", "sascore"]:
-        constraint_model, constraint_model_config = load_regressor(config.constraint, device=device)
-        if config.rc_finetune is not None and config.constraint.fine_tuning:
-            constraint_finetuner = setup_fine_tuner(config.constraint.fn, constraint_model.gnn, config.rc_finetune)
+    if config.constraint.fn in ["score", "energy", "sascore"]:
+        constraint_model = load_regressor(config.constraint, device=device)
     else:
         raise ValueError(f"Unknown constraint function: {config.constraint.fn}")
-
-    rc_fine_tune_freq = config.rc_finetune.freq if config.reward.fine_tuning or config.constraint.fine_tuning else 0
 
     if args.debug:
         config.augmented_lagrangian.sampling.num_samples = 8
@@ -172,7 +150,6 @@ def main():
         args.save_samples = False
         num_iterations = 2
         lagrangian_updates = 2
-        rc_fine_tune_freq = 0
         print("Debug mode activated", flush=True)
 
     print(f"--- Start ---", flush=True)
@@ -187,7 +164,7 @@ def main():
     print(f"--- Config ---", flush=True)
     print(f"Augmented Lagrangian Parameters", flush=True)
     if baseline:
-        print(f"\tbaseline: {baseline}", flush=True)
+        print(f"\tbaseline activated", flush=True)
         print(f"\tbase_lambda: {base_lambda}", flush=True)
     else:
         print(f"\trho_init: {config.augmented_lagrangian.rho_init}", flush=True)
@@ -238,7 +215,7 @@ def main():
         sample_path.mkdir(parents=True, exist_ok=True)
 
     # Generate Samples
-    tmp_model = copy.deepcopy(gen_model)
+    tmp_model = copy.deepcopy(fine_model)
     dgl_mols, rd_mols = sampling(
         config.reward_sampling,
         tmp_model,
@@ -301,6 +278,7 @@ def main():
 
         # Set the lambda and rho in the augmented reward
         augmented_reward.set_lambda_rho(lambda_, rho_)
+        lambda_, rho_ = augmented_reward.get_lambda_rho()
 
         # Print lambda and rho for the current round
         print(f"Lambda: {lambda_:.4f}, rho: {rho_:.4f}", flush=True)
@@ -308,7 +286,7 @@ def main():
         # Set up - Adjoint Matching
         trainer = AdjointMatchingFinetuningTrainerFlowMol(
             config = config.adjoint_matching,
-            model = copy.deepcopy(gen_model),
+            model = copy.deepcopy(fine_model),
             base_model = copy.deepcopy(base_model),
             grad_reward_fn = augmented_reward.grad_augmented_reward_fn,
             device = device,
@@ -365,31 +343,11 @@ def main():
                     am_best_iteration = i
                 tmp_log["total_best_reward"] = am_best_total_reward                
                 
-                if rc_fine_tune_freq > 0 and (i % rc_fine_tune_freq == 0):
-                    if config.reward.fine_tuning:
-                        r_history = finetune(
-                            finetuner = reward_finetuner,
-                            data = [mol for mol in dgl.unbatch(dgl_mols.cpu())],
-                            targets = true_reward,
-                            config = config.rc_finetune,
-                        )
-                    if config.constraint.fine_tuning:
-                        c_history = finetune(
-                            finetuner = constraint_finetuner,
-                            data = [mol for mol in dgl.unbatch(dgl_mols.cpu())],
-                            targets = true_constraint,
-                            config = config.rc_finetune,
-                        )
-                
                 if use_wandb:
                     logs = {}
                     logs.update(tmp_log)
                     logs.update(log_pred_vs_real)
                     log = alm.get_statistics()
-                    if config.reward.fine_tuning:
-                        logs.update(r_history)
-                    if config.constraint.fine_tuning:
-                        logs.update(c_history)
                     logs.update(log)
                     wandb.log(logs)
 
@@ -401,7 +359,7 @@ def main():
         
         full_stats.extend(am_stats)
 
-        gen_model = copy.deepcopy(trainer.fine_model)
+        fine_model = copy.deepcopy(trainer.fine_model)
 
         # Print final statistics
         if full_stats[-1]["constraint"] < al_lowest_const:
@@ -412,7 +370,7 @@ def main():
         print(f"Best overall reward: {al_best_reward:.4f} with violations {al_lowest_const:.4f} at epoch {al_best_epoch}", flush=True)
 
         # Generate Samples and update the augmented lagrangian parameters
-        tmp_model = copy.deepcopy(gen_model)
+        tmp_model = copy.deepcopy(fine_model)
         dgl_mols, rd_mols = sampling(
             config.reward_sampling,
             tmp_model,
@@ -425,7 +383,7 @@ def main():
 
         # Save the model if enabled
         if args.save_model and not args.debug:
-            models_list.append(copy.deepcopy(gen_model.cpu().state_dict()))
+            models_list.append(copy.deepcopy(fine_model.cpu().state_dict()))
 
         alm.update_lambda_rho(dgl_mols)
         del dgl_mols, rd_mols, trainer
@@ -468,7 +426,7 @@ def main():
     if args.save_model and not args.debug:
         for idx, state_dict in enumerate(models_list):
             torch.save(state_dict, save_path / Path(f"model_lu{idx+1}.pth"))
-        torch.save(gen_model.cpu().state_dict(), save_path / Path("final_model.pth"))
+        torch.save(fine_model.cpu().state_dict(), save_path / Path("final_model.pth"))
         print(f"Model saved to {save_path}", flush=True)
 
     # Save the samples if enabled

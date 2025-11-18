@@ -152,19 +152,6 @@ def update_config_with_args(config, args):
         config.min_num_atoms = args.min_num_atoms
     if args.max_num_atoms is not None:
         config.max_num_atoms = args.max_num_atoms
-    # Finetuning RC models
-    if args.reward_finetuning:
-        config.reward.fine_tuning = True
-    if args.constraint_finetuning:
-        config.constraint.fine_tuning = True
-    if args.finetune_freq is not None:
-        config.rc_finetune.freq = args.finetune_freq
-    if args.finetune_lr is not None:
-        config.rc_finetune.lr = args.finetune_lr
-    if args.finetune_weight_decay is not None:
-        config.rc_finetune.weight_decay = args.finetune_weight_decay
-    if args.finetune_clip_grad_norm is not None:
-        config.rc_finetune.clip_grad_norm = args.finetune_clip_grad_norm
     # Augmented Reward Normalization
     if args.augmented_reward_normalize is not None:
         config.augmented_reward.normalize = args.augmented_reward_normalize

@@ -1,5 +1,4 @@
 # fine_tune_trainer.py
-from pyexpat import model
 from typing import List, Optional, Tuple, Union, Dict, Any
 import itertools
 import numpy as np
