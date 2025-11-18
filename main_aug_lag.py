@@ -47,7 +47,7 @@ def load_regressor(config: OmegaConf, device: torch.device) -> nn.Module:
             "hidden_dim": state["config"]["hidden_dim"],
             "depth": state["config"]["depth"],
         }
-        model = GNN(**model_config).load_state_dict(state["model_state"])
+        model = GNN(**model_config)
     elif config.model_type == "egnn":
         model_config = {
             "property": state["config"]["property"],
@@ -57,8 +57,8 @@ def load_regressor(config: OmegaConf, device: torch.device) -> nn.Module:
             "hidden_dim": state["config"]["hidden_dim"],
             "depth": state["config"]["depth"],
         }
-        model = EGNN(**model_config).load_state_dict(state["model_state"])
-
+        model = EGNN(**model_config)
+    model.load_state_dict(state["model_state"])
     return model
 
 def main():

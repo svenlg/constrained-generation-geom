@@ -76,7 +76,7 @@ class AugmentedReward:
         tmp_bound = torch.ones_like(self.tmp_constraint) * self.bound
         if self.baseline:
             g = self.tmp_constraint - tmp_bound
-            tmp_ret = tmp_lambda * g
+            tmp_ret = (tmp_lambda * g).mean()
         elif self.rho_ > 0.0:
             g = self.tmp_constraint - tmp_bound - tmp_lambda / tmp_rho
             relu_g = torch.clamp(g, min=0.0)
