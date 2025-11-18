@@ -31,8 +31,6 @@ class AugmentedReward:
         self.alpha = copy.deepcopy(float(alpha))
         self.bound = copy.deepcopy(float(bound))
 
-        self.filter_bound = self.constraint_fn.filter_function(torch.tensor(self.bound).to(self.device)).item()
-
         # Initialize lambda and rho
         self.lambda_ = 0.0
         self.rho_ = 1.0
@@ -75,7 +73,7 @@ class AugmentedReward:
         """mean((rho/2)*relu(g)^2), with g in units matching constraint mode."""
         tmp_lambda = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.lambda_
         tmp_rho = torch.ones_like(self.tmp_constraint, device=self.tmp_constraint.device) * self.rho_
-        tmp_bound = torch.ones_like(self.tmp_constraint) * self.filter_bound
+        tmp_bound = torch.ones_like(self.tmp_constraint) * self.bound
         if self.baseline:
             g = self.tmp_constraint - tmp_bound
             tmp_ret = tmp_lambda * g
@@ -179,11 +177,11 @@ class AugmentedReward:
         total_reward = self.tmp_total.clone().detach().cpu().item()
         reward = self.tmp_reward.clone().detach().mean().cpu().item()
         constraint = self.tmp_constraint.clone().detach().mean().cpu().item()
-        violations = (self.tmp_constraint >= self.filter_bound+1e-6).float().mean().cpu().item()
+        violations = (self.tmp_constraint >= self.bound+1e-8).float().mean().cpu().item()
         if self.baseline:
-            penalty = self.lambda_ * (constraint - self.filter_bound)
+            penalty = self.lambda_ * (constraint - self.bound)
         elif self.rho_ > 0.0:
-            penalty = self.rho_ / 2.0 * max(constraint - self.filter_bound, ) ** 2
+            penalty = self.rho_ / 2.0 * max(constraint - self.bound, 0) ** 2
         else:
             penalty = 0.0
         ret_dict = {
