@@ -193,15 +193,14 @@ def main():
         constraint_fn = constraint_model,
         alpha = reward_lambda,
         bound = config.constraint.bound,
-        config = config.augmented_reward,
         device = device,
         baseline = baseline
     )
     
     # Set the initial lambda and rho
     augmented_reward.set_lambda_rho(
-        lambda_ = 0.0, 
-        rho_ = config.augmented_lagrangian.rho_init,
+        lambda_ = config.augmented_lagrangian.lambda_init, 
+        rho_ = 0.0 if baseline else config.augmented_lagrangian.rho_init,
     )
 
     # Initialize lists to store loss and rewards
@@ -278,7 +277,6 @@ def main():
 
         # Set the lambda and rho in the augmented reward
         augmented_reward.set_lambda_rho(lambda_, rho_)
-        lambda_, rho_ = augmented_reward.get_lambda_rho()
 
         # Print lambda and rho for the current round
         print(f"Lambda: {lambda_:.4f}, rho: {rho_:.4f}", flush=True)

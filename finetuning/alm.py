@@ -10,11 +10,13 @@ class AugmentedLagrangian:
             constraint_fn: callable,
             bound: float,
             device: torch.device = None,
+            baseline: bool = False,
         ):
         # Config
         self.rho_init = config.get("rho_init", 0.5)
         lambda_min = config.get("lambda_min", -10.0)
         self.lambda_min = -abs(lambda_min)
+        self.lambda_init = config.get("lambda_inti", 0.0)
         self.tau = config.get("tau", 0.99)
         self.eta = config.get("eta", 1.25)
         self.device = device or torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -27,10 +29,13 @@ class AugmentedLagrangian:
         self.bound = float(bound)
 
         # ALM 
-        self.lambda_ = 0.0
+        self.lambda_ = self.lambda_init
         self.rho_ = self.rho_init
         self.contraction_value = None
         self.old_contraction_value = None
+
+        # Baseline
+        self.baseline = baseline
 
     def get_current_lambda_rho(self):
         return copy.deepcopy(self.lambda_), copy.deepcopy(self.rho_)
@@ -69,6 +74,9 @@ class AugmentedLagrangian:
         self.constraint_fn.eval()
         self.lambda_ = self.update_lambda(new_samples)
         self.rho_ = self.update_rho()
+        if self.baseline:
+            self.lambda_ = self.lambda_init
+            self.rho_ = 0.0
     
     def get_statistics(self):
         return {

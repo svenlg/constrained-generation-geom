@@ -2,7 +2,6 @@ import copy
 import torch
 import dgl
 from typing import Union
-from omegaconf import OmegaConf
 
 
 class AugmentedReward:
@@ -13,7 +12,6 @@ class AugmentedReward:
             alpha: float,
             bound: float,
             device: torch.device = None,
-            config: OmegaConf = None,
             baseline: bool = False,
         ):
 
@@ -37,9 +35,7 @@ class AugmentedReward:
 
         # For fixed lambda cauclation (baseline)
         self.baseline = baseline
-        if self.baseline:
-            self.lambda_ = config.get("base_lambda", 1.0)
-        
+
         # For logging
         self.last_grad_norm_full = None
         self.last_grad_norm_reward = None
@@ -47,12 +43,8 @@ class AugmentedReward:
         self.last_grad_norm_penalty = None
 
     def set_lambda_rho(self, lambda_: float, rho_: float):
-        if not self.baseline:
-            self.lambda_ = copy.deepcopy(float(lambda_))
-            self.rho_ = copy.deepcopy(float(rho_))
-
-    def get_lambda_rho(self):
-        return copy.deepcopy(self.lambda_), copy.deepcopy(self.rho_)  
+        self.lambda_ = copy.deepcopy(float(lambda_))
+        self.rho_ = copy.deepcopy(float(rho_))
           
     def _ensure_eval_mode(self):
         if isinstance(self.reward_fn, torch.nn.Module):

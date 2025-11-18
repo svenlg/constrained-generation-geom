@@ -84,13 +84,6 @@ def parse_arguments():
                         help="Weight decay for finetuning, float or null")
     parser.add_argument("--finetune_clip_grad_norm", type=float,
                         help="Clip grad norm for finetuning, float or null")
-    # Augmented Reward Normalization
-    parser.add_argument("--augmented_reward_normalize", action='store_true',
-                        help="Whether to normalize the terms in the augmented reward")
-    parser.add_argument("--augmented_reward_target", type=float,
-                        help="Target value for normalization")
-    parser.add_argument("--augmented_reward_eps", type=float,
-                        help="Epsilon value for normalization")
     return parser.parse_args()
 
 
@@ -123,7 +116,7 @@ def update_config_with_args(config, args):
     if args.baseline:
         config.augmented_lagrangian.baseline = True
     if args.base_lambda is not None:
-        config.augmented_lagrangian.base_lambda = args.base_lambda
+        config.augmented_lagrangian.lambda_init = args.base_lambda
     # Adjoint Matching Parameters
     if args.reward_lambda is not None:
         config.reward_lambda = args.reward_lambda
@@ -152,12 +145,5 @@ def update_config_with_args(config, args):
         config.min_num_atoms = args.min_num_atoms
     if args.max_num_atoms is not None:
         config.max_num_atoms = args.max_num_atoms
-    # Augmented Reward Normalization
-    if args.augmented_reward_normalize is not None:
-        config.augmented_reward.normalize = args.augmented_reward_normalize
-    if args.augmented_reward_target is not None:
-        config.augmented_reward.target = args.augmented_reward_target
-    if args.augmented_reward_eps is not None:
-        config.augmented_reward.eps = args.augmented_reward_eps
     return config
 
