@@ -16,7 +16,7 @@ class AugmentedLagrangian:
         self.rho_init = config.get("rho_init", 0.5)
         lambda_min = config.get("lambda_min", -10.0)
         self.lambda_min = -abs(lambda_min)
-        self.lambda_init = config.get("lambda_inti", 0.0)
+        self.lambda_init = config.get("lambda_init", 0.0)
         self.tau = config.get("tau", 0.99)
         self.eta = config.get("eta", 1.25)
         self.device = device or torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -30,7 +30,7 @@ class AugmentedLagrangian:
 
         # ALM 
         self.lambda_ = self.lambda_init
-        self.rho_ = self.rho_init
+        self.rho_ = 0.0 if baseline else self.rho_init
         self.contraction_value = None
         self.old_contraction_value = None
 

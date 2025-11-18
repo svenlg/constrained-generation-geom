@@ -125,7 +125,7 @@ def main():
 
     baseline = args.baseline
     if baseline:
-        base_lambda = config.augmented_lagrangian.base_lambda
+        base_lambda = config.augmented_lagrangian.lambda_init
 
     # Setup - Gen Model
     base_model = setup_gen_model(config.flow_model, device=device)
@@ -247,6 +247,7 @@ def main():
         constraint_fn = constraint_model,
         bound = config.constraint.bound,
         device = device,
+        baseline = baseline
     )
     # Set initial expected constraint (only needed for logging)
     _ = alm.expected_constraint(dgl_mols)
