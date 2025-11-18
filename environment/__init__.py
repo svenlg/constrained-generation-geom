@@ -1,2 +1,1 @@
 from .augmented_reward import AugmentedReward
-from .inter_atomic_distance import geometry_constraint, wrapped_geometry_constraint
