@@ -25,6 +25,8 @@ from finetuning import AugmentedLagrangian, AdjointMatchingFinetuningTrainerFlow
 
 from regessor import GNN, EGNN
 
+from true_rc import avg_bond_distance_from_graph
+
 # Load - Flow Model
 def setup_gen_model(flow_model: str, device: torch.device): 
     gen_model = flowmol.load_pretrained(flow_model)
@@ -141,7 +143,7 @@ def main():
     if config.constraint.fn in ["score", "energy", "sascore"]:
         constraint_model = load_regressor(config.constraint, device=device)
     elif config.constraint.fn == "inter_atomic_distances":
-        pass # constraint_model = avg_bond_distance_from_graph
+        constraint_model = avg_bond_distance_from_graph
     else:
         raise ValueError(f"Unknown constraint function: {config.constraint.fn}")
 
