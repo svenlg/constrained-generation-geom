@@ -25,5 +25,5 @@ def get_sacore(rd_mols: list) -> pd.DataFrame:
             sa_scores.append(score)
         except:
             continue
-    return pd.DataFrame({"score": sa_scores})
+    return pd.DataFrame({"sascore": sa_scores})
 

@@ -19,7 +19,7 @@ from true_rc import pred_vs_real
 import dgl
 import flowmol
 
-from environment import AugmentedReward, dist_constraint
+from environment import AugmentedReward
 
 from finetuning import AugmentedLagrangian, AdjointMatchingFinetuningTrainerFlowMol
 
@@ -139,7 +139,7 @@ def main():
     if config.constraint.fn in ["score", "energy", "sascore"]:
         constraint_model = load_regressor(config.constraint, device=device)
     elif config.constraint.fn == "inter_atomic_distances":
-        constr
+        pass # constraint_model = avg_bond_distance_from_graph
     else:
         raise ValueError(f"Unknown constraint function: {config.constraint.fn}")
 

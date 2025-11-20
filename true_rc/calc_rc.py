@@ -1,5 +1,4 @@
 import time
-import numpy as np
 import pandas as pd
 from true_rc.posebuster_scorer import posebusters_score
 from true_rc.xtb_calc import compute_xtb

@@ -1,2 +1,1 @@
 from .augmented_reward import AugmentedReward
-from .inter_atomic_distances import dist_constraint
