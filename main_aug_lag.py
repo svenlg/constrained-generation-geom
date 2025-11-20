@@ -83,7 +83,7 @@ def main():
     if config.experiment is not None and "sweep" in config.experiment:
         run_name = f"lu{config.augmented_lagrangian.lagrangian_updates}_rl{config.reward_lambda}_rho{config.augmented_lagrangian.rho_init}_seed{config.seed}"
     elif config.experiment is not None:
-        run_name = f"{run_id}_{config.experiment}_{args.seed}"
+        run_name = f"{run_id}_{config.experiment}_{config.seed}"
     else:
         run_name = f"{run_id}_r{config.reward.model_type}_c{config.constraint.model_type}{config.constraint.bound}_rf{config.reward_lambda}_lu{config.augmented_lagrangian.lagrangian_updates}"
     print(f"Running: {run_name}")
@@ -95,7 +95,9 @@ def main():
 
     save_path = Path(config.root) / Path("aa_experiments")
     if use_wandb and sweep_id is not None:
-        save_path = save_path / Path(f"{config.experiment}") / Path(f"{wandb.run.id}")
+        save_path = save_path / Path(f"{config.experiment}") / Path(f"{config.seed}_{wandb.run.id}")
+    else:
+        save_path = save_path / Path(f"{config.experiment}") / Path(f"{run_name}")
     if (args.save_samples or args.save_model or args.save_plots) and not args.debug:
         save_path = save_path / Path(run_name)
         save_path.mkdir(parents=True, exist_ok=True)
@@ -400,11 +402,7 @@ def main():
     
     if not args.debug:
         # Save configs is config path
-        config_save_path = save_path / Path("configs")
-        config_save_path.mkdir(parents=True, exist_ok=True)
-        OmegaConf.save(config, config_save_path / Path("config.yaml"))
-        # OmegaConf.save(reward_model_config, config_save_path / Path("reward_model_config.yaml"))
-        # OmegaConf.save(constraint_model_config, config_save_path / Path("constraint_model_config.yaml"))
+        OmegaConf.save(config, save_path / Path("config.yaml"))
         df_al.to_csv(save_path / "full_stats.csv", index=False)
         df_alm.to_csv(save_path / "al_stats.csv", index=False)
 
