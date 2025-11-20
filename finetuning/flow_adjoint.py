@@ -170,11 +170,11 @@ def adj_matching_loss(v_base, v_fine, adj, sigma, LCT):
     return loss
 
 loss_weights = {'a': 0.4, 'c': 1.0, 'e': 2.0, 'x': 3.0}
-def adj_matching_loss_list_of_dicts(v_base, v_fine, adj, sigma, LCT):
+def adj_matching_loss_list_of_dicts(v_base, v_fine, adj, sigma, LCT, features=['x', 'a', 'c', 'e']):
     """Adjoint matching loss for FM"""
     eps = 1e-12
     loss = 0.0
-    for i, feat in enumerate(['x', 'a', 'c', 'e']):
+    for i, feat in enumerate(features):
         diff = v_fine[feat] - v_base[feat]                  # [T, ..., ...]
         sig = sigma[:, i].view(-1, 1, 1)                    # [T,1,1]
         term_diff = (2.0 / (sig + eps)) * diff              # [T, ..., ...]
@@ -259,6 +259,8 @@ class AdjointMatchingFinetuningTrainerFlowMol:
 
         # Reward (Gradient of the reward function(al))
         self.grad_reward_fn = grad_reward_fn
+        self.features = config.get("features", ['x', 'a', 'c', 'e'])
+        assert type(self.features) == list, f"features must be a list"
 
         # Engineering tricks:
         self.cutoff_time = config.get("cutoff_time", 0.5) 
@@ -408,9 +410,12 @@ class AdjointMatchingFinetuningTrainerFlowMol:
         assert len(v_base) == len(v_fine) == len(adj) == len(sigma)
 
         # stack each list of dicts to a dict of feature tensors
-        v_base = {feat: torch.stack([v_base[i][feat] for i in range(len(v_base))], dim=0) for feat in ['x', 'a', 'c', 'e']}
-        v_fine = {feat: torch.stack([v_fine[i][feat] for i in range(len(v_fine))], dim=0) for feat in ['x', 'a', 'c', 'e']}
-        adj = {feat: torch.stack([adj[i][feat] for i in range(len(adj))], dim=0) for feat in ['x', 'a', 'c', 'e']}
+        # v_base = {feat: torch.stack([v_base[i][feat] for i in range(len(v_base))], dim=0) for feat in ['x', 'a', 'c', 'e']}
+        # v_fine = {feat: torch.stack([v_fine[i][feat] for i in range(len(v_fine))], dim=0) for feat in ['x', 'a', 'c', 'e']}
+        # adj = {feat: torch.stack([adj[i][feat] for i in range(len(adj))], dim=0) for feat in ['x', 'a', 'c', 'e']}
+        v_base = {feat: torch.stack([v_base[i][feat] for i in range(len(v_base))], dim=0) for feat in self.features}
+        v_fine = {feat: torch.stack([v_fine[i][feat] for i in range(len(v_fine))], dim=0) for feat in self.features}
+        adj = {feat: torch.stack([adj[i][feat] for i in range(len(adj))], dim=0) for feat in self.features}
         sigma = torch.stack(sigma, dim=0)
 
         loss = adj_matching_loss_list_of_dicts(
@@ -419,6 +424,7 @@ class AdjointMatchingFinetuningTrainerFlowMol:
             adj=adj,
             sigma=sigma,
             LCT=self.LCT,
+            features=self.features
         )
 
         if loss.isnan().any():
