@@ -19,7 +19,7 @@ from true_rc import pred_vs_real
 import dgl
 import flowmol
 
-from environment import AugmentedReward
+from environment import AugmentedReward, dist_constraint
 
 from finetuning import AugmentedLagrangian, AdjointMatchingFinetuningTrainerFlowMol
 
@@ -37,7 +37,8 @@ def load_regressor(config: OmegaConf, device: torch.device) -> nn.Module:
     K_a = 10 # number of atom features
     K_c = 6  # number of charge classes
     K_e = 5  # number of bond types (none, single, double, triple, aromatic)
-    model_path = osp.join("pretrained_models", config.fn, config.model_type, config.date, "best_model.pt")
+    print(config.fn, config.model_type, config.date)
+    model_path = osp.join("pretrained_models", str(config.fn), str(config.model_type), str(config.date), "best_model.pt")
     state = torch.load(model_path, map_location=device)
     if config.model_type == "gnn":
         model_config = {
@@ -137,6 +138,8 @@ def main():
     # Setup - Constraint Functions
     if config.constraint.fn in ["score", "energy", "sascore"]:
         constraint_model = load_regressor(config.constraint, device=device)
+    elif config.constraint.fn == "inter_atomic_distances":
+        constr
     else:
         raise ValueError(f"Unknown constraint function: {config.constraint.fn}")
 
