@@ -5,10 +5,12 @@ import torch
 def extract_moldata_from_graph(g: dgl.DGLGraph):
 
     # extract node-level features
-    positions = g.ndata['x_1']
+    # positions = g.ndata['x_1']
+    positions = g.ndata['x_t']
 
     # get bond types and atom indices for every edge, convert types from simplex to integer
-    bond_types = g.edata['e_1'].argmax(dim=1)
+    # bond_types = g.edata['e_1'].argmax(dim=1)
+    bond_types = g.edata['e_t'].argmax(dim=1)
     bond_types[bond_types == 5] = 0 # set masked bonds to 0
     bond_src_idxs, bond_dst_idxs = g.edges()
 
@@ -26,14 +28,19 @@ def extract_moldata_from_graph(g: dgl.DGLGraph):
     return positions, bond_src_idxs, bond_dst_idxs
 
 
-def avg_bond_distance_from_graph(g: dgl.DGLGraph) -> torch.Tensor:
+def bond_distance(g: dgl.DGLGraph) -> torch.Tensor:
 
-    positions, bond_src_idxs, bond_dst_idxs = extract_moldata_from_graph(g)
+    tmp = [graph for graph in dgl.unbatch(g)]
+    rtn_tensor= []
+    for tmp_g in tmp:
+        positions, bond_src_idxs, bond_dst_idxs = extract_moldata_from_graph(tmp_g)
 
-    bond_vecs = positions[bond_src_idxs] - positions[bond_dst_idxs]
-    bond_dists = torch.linalg.norm(bond_vecs, dim=-1)
+        bond_vecs = positions[bond_src_idxs] - positions[bond_dst_idxs]
+        bond_dists = torch.linalg.norm(bond_vecs, dim=-1)
 
-    return bond_dists.mean()
+        rtn_tensor.append(bond_dists.mean().unsqueeze(0))
+
+    return torch.cat(rtn_tensor)
 
 
 

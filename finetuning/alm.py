@@ -71,7 +71,8 @@ class AugmentedLagrangian:
         return rho
 
     def update_lambda_rho(self, new_samples):
-        self.constraint_fn.eval()
+        if isinstance(self.constraint_fn, torch.nn.Module):
+            self.constraint_fn.eval()
         self.lambda_ = self.update_lambda(new_samples)
         self.rho_ = self.update_rho()
         if self.baseline:

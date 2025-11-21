@@ -259,7 +259,7 @@ class AdjointMatchingFinetuningTrainerFlowMol:
 
         # Reward (Gradient of the reward function(al))
         self.grad_reward_fn = grad_reward_fn
-        self.features = config.get("features", ['x', 'a', 'c', 'e'])
+        self.features = list(config.get("features", ['x', 'a', 'c', 'e']))
         assert type(self.features) == list, f"features must be a list"
 
         # Engineering tricks:

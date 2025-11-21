@@ -123,13 +123,13 @@ class LeanAdjointSolverFlow:
             traj_v_pred.append(v_pred)
         
         res = {
-                't': ts[1:], # (T,)
-                'alpha': alpha_s[1:], # (T, 4)
-                'alpha_dot': alpha_dot_s[1:], # (T, 4)
-                'traj_graph': graph_trajectories[1:], # list of dgl graphs (T,)
-                'traj_adj': trajs_adj, # list of dicts with {x, a, c, e} each (T,)
-                'traj_v_pred': traj_v_pred, # list of dicts with {x, a, c, e} each (T,)
-            }
+            't': ts[1:], # (T,)
+            'alpha': alpha_s[1:], # (T, 4)
+            'alpha_dot': alpha_dot_s[1:], # (T, 4)
+            'traj_graph': graph_trajectories[1:], # list of dgl graphs (T,)
+            'traj_adj': trajs_adj, # list of dicts with {x, a, c, e} each (T,)
+            'traj_v_pred': traj_v_pred, # list of dicts with {x, a, c, e} each (T,)
+        }
 
         assert len(res['traj_adj']) == len(res['traj_v_pred'])
         assert len(res['traj_adj']) == res['t'].shape[0]

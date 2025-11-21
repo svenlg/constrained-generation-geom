@@ -1,2 +1,2 @@
 from .calc_rc import get_rc_properties, pred_vs_real
-from .interatomic_distances import avg_bond_distance_from_graph, dist_constraint
+from .interatomic_distances import bond_distance, dist_constraint

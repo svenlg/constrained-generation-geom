@@ -25,7 +25,7 @@ from finetuning import AugmentedLagrangian, AdjointMatchingFinetuningTrainerFlow
 
 from regessor import GNN, EGNN
 
-from true_rc import avg_bond_distance_from_graph
+from true_rc import bond_distance
 
 # Load - Flow Model
 def setup_gen_model(flow_model: str, device: torch.device): 
@@ -142,8 +142,8 @@ def main():
     # Setup - Constraint Functions
     if config.constraint.fn in ["score", "energy", "sascore"]:
         constraint_model = load_regressor(config.constraint, device=device)
-    elif config.constraint.fn == "inter_atomic_distances":
-        constraint_model = avg_bond_distance_from_graph
+    elif config.constraint.fn == "interatomic_distances":
+        constraint_model = bond_distance
     else:
         raise ValueError(f"Unknown constraint function: {config.constraint.fn}")
 
@@ -244,7 +244,7 @@ def main():
     
     # Compare with true value
     pred_rc = augmented_reward.get_reward_constraint()
-    log_pred_vs_real, _, _ = pred_vs_real(rd_mols, pred_rc, reward=config.reward.fn, constraint=config.constraint.fn)
+    log_pred_vs_real, _, _ = pred_vs_real(rd_mols, dgl_mols, pred_rc, reward=config.reward.fn, constraint=config.constraint.fn)
 
     al_lowest_const = full_stats[-1]["constraint"]
     al_best_reward = full_stats[-1]["reward"]
@@ -339,7 +339,7 @@ def main():
                 # Compute reward for current samples
                 _ = augmented_reward(dgl_mols)
                 pred_rc = augmented_reward.get_reward_constraint()
-                log_pred_vs_real, true_reward, true_constraint = pred_vs_real(rd_mols, pred_rc, reward=config.reward.fn, constraint=config.constraint.fn)
+                log_pred_vs_real, _, _ = pred_vs_real(rd_mols, dgl_mols, pred_rc, reward=config.reward.fn, constraint=config.constraint.fn)
                 tmp_log = augmented_reward.get_statistics()
                 tmp_log["loss"] = loss/reward_lambda/(traj_len//2)
                 am_stats.append(tmp_log)
@@ -357,7 +357,7 @@ def main():
                     logs.update(log)
                     wandb.log(logs)
 
-                del dgl_mols, rd_mols, true_reward, true_constraint, pred_rc, log_pred_vs_real, tmp_log
+                del dgl_mols, rd_mols, pred_rc, log_pred_vs_real, tmp_log
 
                 print(f"\tIteration {i}: Total Reward: {am_stats[-1]['total_reward']:.4f}, Reward: {am_stats[-1]['reward']:.4f}, "
                       f"Constraint: {am_stats[-1]['constraint']:.4f}, Violations: {am_stats[-1]['constraint_violations']:.4f}", flush=True)
