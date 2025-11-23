@@ -210,6 +210,7 @@ def connectivity_matrix_and_loss(
     w_matrix: float = 1.0,
     w_comp_geom: float = 0.00,
     target_com_sep: float = 4.0,
+    return_M: bool = False,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Build a connectivity-aware matrix M and a scalar loss.
@@ -303,4 +304,4 @@ def connectivity_matrix_and_loss(
     if loss >= 0.1:
         loss = torch.tensor(0.1, device=device, dtype=dtype, requires_grad=True)
     
-    return M, loss
+    return M, loss if return_M else loss
