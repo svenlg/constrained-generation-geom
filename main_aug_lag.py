@@ -408,6 +408,7 @@ def main():
     
     if not args.debug:
         # Save configs is config path
+        save_path.mkdir(parents=True, exist_ok=True)
         OmegaConf.save(config, save_path / Path("config.yaml"))
         df_al.to_csv(save_path / "full_stats.csv", index=False)
         df_alm.to_csv(save_path / "al_stats.csv", index=False)
