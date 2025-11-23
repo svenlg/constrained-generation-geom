@@ -39,14 +39,13 @@ def get_rc_properties(
 
     # Interatomic Distance Calculations
     tmp_time = time.time()
-    if constraint == "interatomic_distances":
-        tmp_interatomic_distances = bond_distance(dgl_mols).tolist()
-        interatomic_distances = [{"interatomic_distances": tmp} for tmp in tmp_interatomic_distances]
-        df_interatomic_distance = pd.DataFrame.from_records(interatomic_distances)
-    elif constraint == "interatomic_distances_new":
-        tmp_interatomic_distances = connectivity_matrix_and_loss(dgl_mols).tolist()
-        interatomic_distances = [{"interatomic_distances_new": tmp} for tmp in tmp_interatomic_distances]
-        df_interatomic_distance = pd.DataFrame.from_records(interatomic_distances)
+    tmp_interatomic_distances = bond_distance(dgl_mols).tolist()
+    interatomic_distances = [{"interatomic_distances": tmp} for tmp in tmp_interatomic_distances]
+    df_interatomic_distance = pd.DataFrame.from_records(interatomic_distances)
+
+    tmp_interatomic_distances = connectivity_matrix_and_loss(dgl_mols).tolist()
+    interatomic_distances = [{"interatomic_distances_new": tmp} for tmp in tmp_interatomic_distances]
+    df_interatomic_distance_new = pd.DataFrame.from_records(interatomic_distances)
     if verbose:
         print(f"Interatomic Distance time: {time.time() - tmp_time:.2f} seconds", flush=True)
    
@@ -60,7 +59,7 @@ def get_rc_properties(
         print(f"XTB time: {time.time() - tmp_time:.2f} seconds", flush=True)
     df_xtb = pd.DataFrame.from_records(properties)
     
-    df = pd.concat([df_scores, df_interatomic_distance, df_xtb], axis=1)
+    df = pd.concat([df_scores, df_interatomic_distance, df_interatomic_distance_new, df_xtb], axis=1)
     return df if not return_dict else df.to_dict(orient="records")
 
 
