@@ -25,7 +25,7 @@ from finetuning import AugmentedLagrangian, AdjointMatchingFinetuningTrainerFlow
 
 from regessor import GNN, EGNN
 
-from true_rc import bond_distance
+from true_rc import bond_distance, connectivity_matrix_and_loss
 
 # Load - Flow Model
 def setup_gen_model(flow_model: str, device: torch.device): 
@@ -144,6 +144,8 @@ def main():
         constraint_model = load_regressor(config.constraint, device=device)
     elif config.constraint.fn == "interatomic_distances":
         constraint_model = bond_distance
+    elif config.constraint.fn == "interatomic_distances_new":
+        constraint_model = connectivity_matrix_and_loss
     else:
         raise ValueError(f"Unknown constraint function: {config.constraint.fn}")
 
