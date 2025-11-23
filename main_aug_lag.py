@@ -190,6 +190,8 @@ def main():
     print(f"\tsampling.num_integration_steps: {config.adjoint_matching.sampling.num_integration_steps}", flush=True)
     print(f"\tfinetune_steps: {finetune_steps}", flush=True)
     print(f"\tnum_iterations: {num_iterations}", flush=True)
+    if "features" in config.adjoint_matching:
+        print(f"\tfeatures: {config.adjoint_matching.features}", flush=True)
 
     print(f"Molecular Generation Parameters", flush=True)
     print(f"\tn_atoms: {n_atoms}", flush=True)
