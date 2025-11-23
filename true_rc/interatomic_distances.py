@@ -1,6 +1,6 @@
-import dgl
 import torch
-
+import dgl
+from typing import List, Tuple
 
 def extract_moldata_from_graph(g: dgl.DGLGraph,) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
@@ -67,12 +67,6 @@ def dist_constraint(g: dgl.DGLGraph) -> torch.Tensor:
 
 ################################
 
-import torch
-import dgl
-from typing import List, Tuple
-from collections import defaultdict, deque
-
-
 # Example atom type map (indices must match g.ndata["a_1"] one-hot)
 ATOM_TYPE_MAP: List[str] = ["C", "H", "N", "O", "F", "P", "S", "Cl", "Br", "I"]
 IDX_H = ATOM_TYPE_MAP.index("H")
@@ -137,53 +131,9 @@ def ideal_bond_lengths(
     return ideal_len
 
 
-def get_components(
-    num_nodes: int,
-    bond_src_idxs: torch.Tensor,
-    bond_dst_idxs: torch.Tensor,
-):
-    """
-    Connected components based *only* on real bonds.
-    Returns:
-      components: list of components, each a list of Python ints (node indices).
-    """
-    from collections import defaultdict, deque
-
-    adj = defaultdict(list)
-    src_list = bond_src_idxs.tolist()
-    dst_list = bond_dst_idxs.tolist()
-
-    for s, d in zip(src_list, dst_list):
-        adj[s].append(d)
-        adj[d].append(s)
-
-    visited = [False] * num_nodes
-    components = []
-
-    for start in range(num_nodes):
-        if visited[start]:
-            continue
-        q = deque([start])
-        visited[start] = True
-        comp = [start]
-        while q:
-            v = q.popleft()
-            for nb in adj[v]:
-                if not visited[nb]:
-                    visited[nb] = True
-                    q.append(nb)
-                    comp.append(nb)
-        components.append(comp)
-
-    return components
-
-
 def connectivity_matrix_and_loss(
     g: dgl.DGLGraph,
     iso_penalty_value: float = 3.0,
-    w_matrix: float = 1.0,
-    w_comp_geom: float = 0.00,
-    target_com_sep: float = 4.0,
 ) -> torch.Tensor:
     """
     Build a connectivity-aware matrix M and a scalar loss.
@@ -254,27 +204,7 @@ def connectivity_matrix_and_loss(
         M = bonded_dev + iso_diag  # (N, N)
 
         # --- matrix-based loss term (differentiable w.r.t. positions) ---
-        matrix_term = M.abs().mean()
-
-        # --- component geometry term (differentiable w.r.t. positions) ---
-        components = get_components(N, bond_src_idxs, bond_dst_idxs)
-        if len(components) > 1:
-            coms = []
-            for comp in components:
-                idx = torch.tensor(comp, device=device, dtype=torch.long)
-                coms.append(positions[idx].mean(dim=0))
-            coms = torch.stack(coms, dim=0)            # (C, 3)
-
-            com_dists = torch.cdist(coms, coms)        # (C, C)
-            i, j = torch.tril_indices(coms.size(0), coms.size(0), offset=-1, device=device)
-            pair_dists = com_dists[i, j]               # (C_pairs,)
-
-            comp_geom_term = ((pair_dists - target_com_sep).clamp_min(0.0) ** 2).mean()
-        else:
-            comp_geom_term = torch.zeros((), device=device, dtype=dtype)
-
-        # --- combine ---
-        loss = w_matrix * matrix_term + w_comp_geom * comp_geom_term
+        loss = M.abs().mean()
 
         if loss >= 0.1:
             loss = torch.tensor(0.1, device=device, dtype=dtype, requires_grad=True)
