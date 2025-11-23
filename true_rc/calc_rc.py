@@ -5,7 +5,7 @@ from true_rc.xtb_calc import compute_xtb
 from true_rc.sascore import get_sacore
 from typing import List
 import dgl
-from true_rc.interatomic_distances import bond_distance
+from true_rc.interatomic_distances import bond_distance, connectivity_matrix_and_loss
 
 import logging
 from rdkit import RDLogger
@@ -15,8 +15,8 @@ logging.getLogger("rdkit").setLevel(logging.CRITICAL)
 def get_rc_properties(
         rd_mols: List,
         dgl_mols: dgl.DGLGraph,
-        reward: str = "dipole",
-        constraint: str = "score",
+        reward: str,
+        constraint: str,
         verbose: bool = False,
         return_dict: bool = False,
         ) -> List[dict]:
@@ -39,12 +39,17 @@ def get_rc_properties(
 
     # Interatomic Distance Calculations
     tmp_time = time.time()
-    tmp_interatomic_distances = bond_distance(dgl_mols).tolist()
-    interatomic_distances = [{"interatomic_distances": tmp} for tmp in tmp_interatomic_distances]
+    if constraint == "interatomic_distances":
+        tmp_interatomic_distances = bond_distance(dgl_mols).tolist()
+        interatomic_distances = [{"interatomic_distances": tmp} for tmp in tmp_interatomic_distances]
+        df_interatomic_distance = pd.DataFrame.from_records(interatomic_distances)
+    elif constraint == "interatomic_distances_new":
+        tmp_interatomic_distances = connectivity_matrix_and_loss(dgl_mols).tolist()
+        interatomic_distances = [{"interatomic_distances_new": tmp} for tmp in tmp_interatomic_distances]
+        df_interatomic_distance = pd.DataFrame.from_records(interatomic_distances)
     if verbose:
         print(f"Interatomic Distance time: {time.time() - tmp_time:.2f} seconds", flush=True)
-    df_interatomic_distance = pd.DataFrame.from_records(interatomic_distances)
-
+   
     # XTB-Calulations
     tmp_time = time.time()
     properties = []

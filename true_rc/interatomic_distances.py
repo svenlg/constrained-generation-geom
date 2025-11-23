@@ -78,13 +78,13 @@ def extract_moldata_from_graph(
       bond_dst_idxs:(E,)    long tensor, dest node indices of real bonds (upper triangle)
     """
     # Node positions
-    positions = g.ndata["x_1"]                    # (N, 3)
+    positions = g.ndata["x_t"]                    # (N, 3)
 
     # Atom types as indices
-    atom_type_idx = g.ndata["a_1"].argmax(dim=1)  # (N,)
+    atom_type_idx = g.ndata["a_t"].argmax(dim=1)  # (N,)
 
     # Edge-level bond type prediction (one-hot over 6 classes)
-    bond_types = g.edata["e_1"].argmax(dim=1)     # (E_all,)
+    bond_types = g.edata["e_t"].argmax(dim=1)     # (E_all,)
     bond_types[bond_types == 5] = 0               # masked -> 0
 
     bond_src_idxs, bond_dst_idxs = g.edges()      # (E_all,)
@@ -236,71 +236,75 @@ def connectivity_matrix_and_loss(
       M:    (N, N) tensor
       loss: scalar tensor
     """
-    positions, atom_type_idx, bond_types, bond_src_idxs, bond_dst_idxs = \
-        extract_moldata_from_graph(g)
+    losses = []
+    for mols in dgl.unbatch(g):
+        positions, atom_type_idx, bond_types, bond_src_idxs, bond_dst_idxs = \
+            extract_moldata_from_graph(mols)
 
-    device = positions.device
-    dtype = positions.dtype
-    N = positions.shape[0]
+        device = positions.device
+        dtype = positions.dtype
+        N = positions.shape[0]
 
-    # --- pairwise distance matrix (conf_dists) ---
-    # (N, N), symmetric, 0 on diagonal, differentiable w.r.t. positions
-    conf_dists = torch.cdist(positions, positions)
+        # --- pairwise distance matrix (conf_dists) ---
+        # (N, N), symmetric, 0 on diagonal, differentiable w.r.t. positions
+        conf_dists = torch.cdist(positions, positions)
 
-    # --- build bond mask & ideal length matrix ---
-    bond_mask_mat = torch.zeros((N, N), device=device, dtype=dtype)
-    ideal_len_mat = torch.zeros((N, N), device=device, dtype=dtype)
+        # --- build bond mask & ideal length matrix ---
+        bond_mask_mat = torch.zeros((N, N), device=device, dtype=dtype)
+        ideal_len_mat = torch.zeros((N, N), device=device, dtype=dtype)
 
-    if bond_types.numel() > 0:
-        ideal_len = ideal_bond_lengths(
-            bond_types,
-            atom_type_idx,
-            bond_src_idxs,
-            bond_dst_idxs,
-        )  # (E,)
+        if bond_types.numel() > 0:
+            ideal_len = ideal_bond_lengths(
+                bond_types,
+                atom_type_idx,
+                bond_src_idxs,
+                bond_dst_idxs,
+            )  # (E,)
 
-        # fill symmetric entries
-        bond_mask_mat[bond_src_idxs, bond_dst_idxs] = 1.0
-        bond_mask_mat[bond_dst_idxs, bond_src_idxs] = 1.0
+            # fill symmetric entries
+            bond_mask_mat[bond_src_idxs, bond_dst_idxs] = 1.0
+            bond_mask_mat[bond_dst_idxs, bond_src_idxs] = 1.0
 
-        ideal_len_mat[bond_src_idxs, bond_dst_idxs] = ideal_len
-        ideal_len_mat[bond_dst_idxs, bond_src_idxs] = ideal_len
+            ideal_len_mat[bond_src_idxs, bond_dst_idxs] = ideal_len
+            ideal_len_mat[bond_dst_idxs, bond_src_idxs] = ideal_len
 
-    # --- bonded deviation matrix ---
-    bonded_dev = (conf_dists - ideal_len_mat) * bond_mask_mat  # (N, N)
+        # --- bonded deviation matrix ---
+        bonded_dev = (conf_dists - ideal_len_mat) * bond_mask_mat  # (N, N)
 
-    # --- isolated atoms: diagonal penalty = iso_penalty_value ---
-    degrees = bond_mask_mat.sum(dim=1)          # (N,)
-    iso_mask = (degrees == 0).float()           # (N,)
-    iso_diag = torch.diag(iso_mask * iso_penalty_value)  # (N, N)
+        # --- isolated atoms: diagonal penalty = iso_penalty_value ---
+        degrees = bond_mask_mat.sum(dim=1)          # (N,)
+        iso_mask = (degrees == 0).float()           # (N,)
+        iso_diag = torch.diag(iso_mask * iso_penalty_value)  # (N, N)
 
-    # final matrix
-    M = bonded_dev + iso_diag  # (N, N)
+        # final matrix
+        M = bonded_dev + iso_diag  # (N, N)
 
-    # --- matrix-based loss term (differentiable w.r.t. positions) ---
-    matrix_term = M.abs().mean()
+        # --- matrix-based loss term (differentiable w.r.t. positions) ---
+        matrix_term = M.abs().mean()
 
-    # --- component geometry term (differentiable w.r.t. positions) ---
-    components = get_components(N, bond_src_idxs, bond_dst_idxs)
-    if len(components) > 1:
-        coms = []
-        for comp in components:
-            idx = torch.tensor(comp, device=device, dtype=torch.long)
-            coms.append(positions[idx].mean(dim=0))
-        coms = torch.stack(coms, dim=0)            # (C, 3)
+        # --- component geometry term (differentiable w.r.t. positions) ---
+        components = get_components(N, bond_src_idxs, bond_dst_idxs)
+        if len(components) > 1:
+            coms = []
+            for comp in components:
+                idx = torch.tensor(comp, device=device, dtype=torch.long)
+                coms.append(positions[idx].mean(dim=0))
+            coms = torch.stack(coms, dim=0)            # (C, 3)
 
-        com_dists = torch.cdist(coms, coms)        # (C, C)
-        i, j = torch.tril_indices(coms.size(0), coms.size(0), offset=-1, device=device)
-        pair_dists = com_dists[i, j]               # (C_pairs,)
+            com_dists = torch.cdist(coms, coms)        # (C, C)
+            i, j = torch.tril_indices(coms.size(0), coms.size(0), offset=-1, device=device)
+            pair_dists = com_dists[i, j]               # (C_pairs,)
 
-        comp_geom_term = ((pair_dists - target_com_sep).clamp_min(0.0) ** 2).mean()
-    else:
-        comp_geom_term = torch.zeros((), device=device, dtype=dtype)
+            comp_geom_term = ((pair_dists - target_com_sep).clamp_min(0.0) ** 2).mean()
+        else:
+            comp_geom_term = torch.zeros((), device=device, dtype=dtype)
 
-    # --- combine ---
-    loss = w_matrix * matrix_term + w_comp_geom * comp_geom_term
+        # --- combine ---
+        loss = w_matrix * matrix_term + w_comp_geom * comp_geom_term
 
-    if loss >= 0.1:
-        loss = torch.tensor(0.1, device=device, dtype=dtype, requires_grad=True)
-    
-    return loss
+        if loss >= 0.1:
+            loss = torch.tensor(0.1, device=device, dtype=dtype, requires_grad=True)
+        
+        losses.append(loss.unsqueeze(0))
+ 
+    return torch.cat(losses)
