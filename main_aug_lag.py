@@ -176,9 +176,11 @@ def main():
         print(f"\tbaseline activated", flush=True)
         print(f"\tbase_lambda: {base_lambda}", flush=True)
     else:
+        print(f"\tlagrangian_updates: {lagrangian_updates}", flush=True)
         print(f"\trho_init: {config.augmented_lagrangian.rho_init}", flush=True)
         print(f"\teta: {config.augmented_lagrangian.eta}", flush=True)
-        print(f"\tlagrangian_updates: {lagrangian_updates}", flush=True)
+        print(f"\tau: {config.augmented_lagrangian.tau}", flush=True)
+        print(f"\tlambda_min: {config.augmented_lagrangian.lambda_min}", flush=True)
 
     print(f"Adjoint Matching Parameters", flush=True)
     print(f"\treward_lambda: {reward_lambda}", flush=True)

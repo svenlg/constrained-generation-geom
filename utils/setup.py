@@ -39,6 +39,10 @@ def parse_arguments():
                         help="Override rho_init in config")
     parser.add_argument("--eta", type=float,
                         help="Override eta in config")
+    parser.add_argument("--tau", type=float,
+                        help="Override tau in config")
+    parser.add_argument("--lambda_min", type=float,
+                        help="Override eta in config")
     parser.add_argument("--baseline", action='store_true',
                         help="Do baseline, default: false")
     parser.add_argument("--base_lambda", type=float,
@@ -107,12 +111,16 @@ def update_config_with_args(config, args):
     if args.total_steps is not None:
         config.total_steps = args.total_steps
     # Augmented Lagrangian Parameters
+    if args.lagrangian_updates is not None:
+        config.augmented_lagrangian.lagrangian_updates = args.lagrangian_updates
     if args.rho_init is not None:
         config.augmented_lagrangian.rho_init = args.rho_init
     if args.eta is not None:
         config.augmented_lagrangian.eta = args.eta
-    if args.lagrangian_updates is not None:
-        config.augmented_lagrangian.lagrangian_updates = args.lagrangian_updates
+    if args.tau is not None:
+        config.augmented_lagrangian.tau = args.tau
+    if args.lambda_min is not None:
+        config.augmented_lagrangian.lambda_min = args.lambda_min
     if args.baseline:
         config.augmented_lagrangian.baseline = True
     if args.base_lambda is not None:
