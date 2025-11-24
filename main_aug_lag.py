@@ -74,6 +74,8 @@ def main():
     
     # Update config with command line arguments
     config = update_config_with_args(config, args)
+    baseline = args.baseline
+    config.baseline = baseline
 
     # Setup - Seed and device
     set_seed(config.seed)
@@ -128,7 +130,6 @@ def main():
     num_iterations = config.total_steps // lagrangian_updates
     plotting_freq = 3
 
-    baseline = args.baseline
     if baseline:
         base_lambda = config.augmented_lagrangian.lambda_init
 
