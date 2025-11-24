@@ -349,6 +349,7 @@ def main():
                 log_pred_vs_real, _, _ = pred_vs_real(rd_mols, dgl_mols, pred_rc, reward=config.reward.fn, constraint=config.constraint.fn)
                 tmp_log = augmented_reward.get_statistics()
                 tmp_log["loss"] = loss/reward_lambda/(traj_len//2)
+                tmp_log.update(log_pred_vs_real)
                 am_stats.append(tmp_log)
 
                 if am_stats[-1]["total_reward"] > am_best_total_reward:
