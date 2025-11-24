@@ -17,6 +17,8 @@ def parse_arguments():
                         help="Create animation of the samples and save the samples, default: false")
     parser.add_argument("--save_plots", action='store_true',
                         help="Save plots of rewards and constraints, default: false")
+    parser.add_argument("--plotting_freq", type=int,
+                        help="Frequency of plotting during training, int or null")
     # FlowMol arguments
     flowmol_choices = ['qm9_ctmc', 'qm9_gaussian', 'geom_ctmc', 'geom_gaussian']
     parser.add_argument('--flow_model', type=str, choices=flowmol_choices,

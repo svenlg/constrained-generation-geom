@@ -128,7 +128,7 @@ def main():
     finetune_steps = config.adjoint_matching.sampling.num_samples // config.adjoint_matching.batch_size
 
     num_iterations = config.total_steps // lagrangian_updates
-    plotting_freq = 3
+    plotting_freq = 3 if args.plotting_freq is None else args.plotting_freq
 
     if baseline:
         base_lambda = config.augmented_lagrangian.lambda_init
