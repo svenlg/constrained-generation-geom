@@ -2,10 +2,10 @@ import os
 import yaml
 import shutil
 
-BASE_DIR = "/Users/svlg/MasterThesis/v03_geom/aa_experiments/"
-FOLDER_NAME = "al_rho_init"  # change this if your root folder is different
+BASE_DIR = "/cluster/home/sgutjahr/MasterThesis/constrained-generation-geom/aa_experiments"
+FOLDER_NAME = "baseline_dipole_energy_final"  # change this if your root folder is different
 BASE_DIR = os.path.join(BASE_DIR, FOLDER_NAME)
-PARAMETER_NAME = "rho_init"
+PARAMETER_NAME = "lambda_init"
 
 for name in os.listdir(BASE_DIR):
     folder = os.path.join(BASE_DIR, name)
@@ -26,9 +26,12 @@ for name in os.listdir(BASE_DIR):
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
 
-    try:
-        parameter_value = config["augmented_lagrangian"][PARAMETER_NAME]
-    except KeyError:
+    parameter_value = (
+        config.get("augmented_lagrangian", {}).get(PARAMETER_NAME)
+        or config.get(PARAMETER_NAME)
+    )
+
+    if parameter_value is None:
         print(f"{PARAMETER_NAME} not found in {config_path}, skipping.")
         continue
 
