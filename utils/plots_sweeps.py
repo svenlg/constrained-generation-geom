@@ -16,6 +16,8 @@ BOUND_COLOR = "#D62728"  # red for constraint bound
 BASELINE_COLOR = "#7F7F7F"  # gray for baselines
 # >>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<
 
+np.random.seed(0)
+
 def style_for_name(name):
     """
     Return (color, label) based on a run/sweep 'value_str'.
@@ -27,11 +29,13 @@ def style_for_name(name):
     upper = str(name).upper()
     if "CFO" in upper:
         return CFO_COLOR, "CFO"
-    if "AM" in upper:
+    elif "AM" in upper:
         return AM_COLOR, "AM"
-    if "PRE" in upper:
+    elif "PRE" in upper:
         return PRE_COLOR, "PRE"
-    return None, str(name)
+    # return random color for others
+    color_hex = mcolors.to_hex(np.random.rand(3,))
+    return color_hex, str(name)
 
 
 def find_sweep_dirs(base_dir, sweeps_to_plot):
@@ -197,6 +201,7 @@ def plot_sweep(
     use_k_axis=False,
     use_cfo_color=False,
     plot_pre=False,
+    base_line_comparison=False,
     safe_fig=False,
     am_reward_baseline=None,
     am_constraint_baseline=None,
@@ -269,10 +274,11 @@ def plot_sweep(
             key for key, _ in sorted_items
             if key not in ("CFO", "AM", "PRE")
         ]
-        baseline_colors = generate_baseline_colors(len(baseline_keys))
-        baseline_color_map = {
-            k: c for k, c in zip(baseline_keys, baseline_colors)
-        }
+        if base_line_comparison:
+            baseline_colors = generate_baseline_colors(len(baseline_keys))
+            baseline_color_map = {
+                k: c for k, c in zip(baseline_keys, baseline_colors)
+            }
 
 
         # We'll keep the last r_mean/c_mean around for PRE baseline
@@ -310,14 +316,12 @@ def plot_sweep(
                 # Everything in this sweep is CFO by default
                 color = CFO_COLOR
                 label = "CFO"
+            elif base_line_comparison:
+                # baseline values: use BASELINE_COLOR variations
+                color = baseline_color_map.get(value_str, BASELINE_COLOR)
+                label = str(value_str)
             else:
                 color, label = style_for_name(value_str)
-
-                # If style_for_name did not assign a color, treat as baseline
-                if color is None:
-                    # baseline values: use BASELINE_COLOR variations
-                    color = baseline_color_map.get(value_str, BASELINE_COLOR)
-                    label = str(value_str)
 
             # reward
             ax_reward.plot(x, r_mean, label=label, color=color)
@@ -610,6 +614,8 @@ def main():
     parser.add_argument("--baseline_values", type=str, default=None,
                         help="Comma-separated list of baseline values to include "
                              "(e.g. '0.01,1.0'). If omitted, use all baseline values.")
+    parser.add_argument("--base_line_comparison", action="store_true",
+                        help="Use varied baseline colors for different baseline values.")
     parser.add_argument("--k_update_steps", "-k", type=int, default=10,
                         help="Env-step distance between two k-updates.")
     parser.add_argument("--use_k_axis", action="store_true",
@@ -671,6 +677,7 @@ def main():
             font_scale=args.font_scale,
             logging_interval=args.logging_interval,
             k_update_steps=args.k_update_steps,
+            base_line_comparison=args.base_line_comparison,
             use_k_axis=args.use_k_axis,
             use_cfo_color=args.use_cfo_color,
             safe_fig=args.safe_fig,
