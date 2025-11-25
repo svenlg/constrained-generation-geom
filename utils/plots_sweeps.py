@@ -3,16 +3,18 @@ import argparse
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 
 
 # >>>>>>>>>>>>>>>> CONFIGURATION <<<<<<<<<<<<<<<<
 PRE_COLOR = "#00AF54"
 AM_COLOR  = "#EBE013"   # AM -> yellow
-PURPLE20  = "#8332AC"   # CFO -> purple
+CFO_COLOR  = "#8332AC"   # CFO -> purple
 TRUE_COLOR = "#0072B5"  # True -> blue
 PREDICTED_COLOR = "#DC9326"  # Predicted -> orange
 BOUND_COLOR = "#D62728"  # red for constraint bound
-
+BASELINE_COLOR = "#7F7F7F"  # gray for baselines
+# >>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<
 
 def style_for_name(name):
     """
@@ -24,7 +26,7 @@ def style_for_name(name):
     """
     upper = str(name).upper()
     if "CFO" in upper:
-        return PURPLE20, "CFO"
+        return CFO_COLOR, "CFO"
     if "AM" in upper:
         return AM_COLOR, "AM"
     if "PRE" in upper:
@@ -44,6 +46,45 @@ def find_sweep_dirs(base_dir, sweeps_to_plot):
     if sweeps_to_plot is not None:
         all_dirs = [d for d in all_dirs if d in sweeps_to_plot]
     return sorted(all_dirs)
+
+
+def collect_cfo_and_baseline(cfo_dir, baseline_dir, baseline_values=None):
+    """
+    Build a value_to_runs mapping from:
+      - cfo_dir: each subdirectory is a seed for the single CFO group.
+      - baseline_dir: subdirectories are named 'value_seed' like '0.01_0';
+        they are grouped by the 'value' part via collect_runs_for_sweep.
+      - baseline_values: optional list of value strings to keep, e.g. ['0.01', '1.0'].
+
+    Returns:
+        dict: { "CFO": [list of run_dirs], "0.01": [runs...], "1.0": [runs...], ... }
+    """
+    value_to_runs = {}
+
+    # CFO group
+    if cfo_dir is not None:
+        cfo_runs = [
+            os.path.join(cfo_dir, d)
+            for d in os.listdir(cfo_dir)
+            if os.path.isdir(os.path.join(cfo_dir, d))
+        ]
+        if cfo_runs:
+            value_to_runs["CFO"] = cfo_runs
+
+    # Baseline groups: reuse existing grouping logic
+    if baseline_dir is not None:
+        baseline_groups = collect_runs_for_sweep(baseline_dir)  # '0.01_0' -> '0.01', etc.
+
+        if baseline_values is not None:
+            allowed = {str(v) for v in baseline_values}
+            baseline_groups = {k: v for k, v in baseline_groups.items() if k in allowed}
+
+        # merge baseline groups in
+        for val, runs in baseline_groups.items():
+            if runs:
+                value_to_runs[val] = runs
+
+    return value_to_runs
 
 
 def collect_runs_for_sweep(sweep_path):
@@ -66,6 +107,20 @@ def collect_runs_for_sweep(sweep_path):
             groups.setdefault("CFO", []).append(run_dir)
     return groups
 
+
+def generate_baseline_colors(n, base_hex=BASELINE_COLOR):
+    """
+    Generate n colors around BASELINE_COLOR by scaling brightness a bit.
+    First one is (almost) the base color, others slightly lighter/darker.
+    """
+    base = np.array(mcolors.to_rgb(base_hex))
+    # scale factors from a bit darker to a bit lighter
+    factors = np.linspace(0.5, 1.5, max(n, 1))
+    colors = []
+    for f in factors:
+        c = np.clip(base * f, 0, 1)
+        colors.append(mcolors.to_hex(c))
+    return colors
 
 def load_metric_arrays(run_dirs, metric):
     """
@@ -140,12 +195,15 @@ def plot_sweep(
     logging_interval=3,
     k_update_steps=None,
     use_k_axis=False,
+    use_cfo_color=False,
     plot_pre=False,
     safe_fig=False,
     am_reward_baseline=None,
     am_constraint_baseline=None,
     bound=None,
+    value_to_runs_override=None,
 ):
+
     """
     Plot reward + constraint curves with 95% CI into two separate figures.
 
@@ -156,12 +214,18 @@ def plot_sweep(
     bound            : if not None, draw horizontal red line at this constraint value
                        on the constraint figure only.
     """
-    sweep_path = os.path.join(base_dir, sweep_name)
-    value_to_runs = collect_runs_for_sweep(sweep_path)
+    if value_to_runs_override is None:
+        sweep_path = os.path.join(base_dir, sweep_name)
+        value_to_runs = collect_runs_for_sweep(sweep_path)
 
-    if not value_to_runs:
-        print(f"No runs found in {sweep_path}")
-        return
+        if not value_to_runs:
+            print(f"No runs found in {sweep_path}")
+            return
+    else:
+        value_to_runs = value_to_runs_override
+        if not value_to_runs:
+            print("No runs found in provided value_to_runs mapping.")
+            return
 
     # ---------- font scaling ----------
     base_fs = 10 * font_scale
@@ -200,6 +264,17 @@ def plot_sweep(
                 key=lambda x: float(x[0])
             )
 
+        # Build baseline color map (for everything that is not CFO/AM/PRE)
+        baseline_keys = [
+            key for key, _ in sorted_items
+            if key not in ("CFO", "AM", "PRE")
+        ]
+        baseline_colors = generate_baseline_colors(len(baseline_keys))
+        baseline_color_map = {
+            k: c for k, c in zip(baseline_keys, baseline_colors)
+        }
+
+
         # We'll keep the last r_mean/c_mean around for PRE baseline
         r_mean = c_mean = r_low = r_high = c_low = c_high = None
 
@@ -229,12 +304,28 @@ def plot_sweep(
             xmax = max(xmax, x[-1])
 
             # reward (CFO-style)
-            ax_reward.plot(x, r_mean, label="CFO", color=PURPLE20)
-            ax_reward.fill_between(x, r_low, r_high, alpha=0.2, color=PURPLE20)
 
-            # constraint (CFO-style)
-            ax_constraint.plot(x, c_mean, label="CFO", color=PURPLE20)
-            ax_constraint.fill_between(x, c_low, c_high, alpha=0.2, color=PURPLE20)
+            # choose color + label based on name (PRE / AM / CFO / baseline)
+            if use_cfo_color:
+                # Everything in this sweep is CFO by default
+                color = CFO_COLOR
+                label = "CFO"
+            else:
+                color, label = style_for_name(value_str)
+
+                # If style_for_name did not assign a color, treat as baseline
+                if color is None:
+                    # baseline values: use BASELINE_COLOR variations
+                    color = baseline_color_map.get(value_str, BASELINE_COLOR)
+                    label = str(value_str)
+
+            # reward
+            ax_reward.plot(x, r_mean, label=label, color=color)
+            ax_reward.fill_between(x, r_low, r_high, alpha=0.2, color=color)
+
+            # constraint
+            ax_constraint.plot(x, c_mean, label=label, color=color)
+            ax_constraint.fill_between(x, c_low, c_high, alpha=0.2, color=color)
 
             # if this is the CFO group, remember its curve for dots
             if value_str == "CFO":
@@ -248,7 +339,7 @@ def plot_sweep(
             if use_k_axis:
                 # in k-space, bars at k = 1,2,3,... up to max_k
                 max_k = max_step / float(k_update_steps)
-                k_vals = np.arange(1, np.floor(max_k) + 1, 1.0)
+                k_vals = np.arange(0, np.floor(max_k), 1.0)
                 vlines_x = k_vals
             else:
                 # in env-step space, bars at 0, k, 2k, ...
@@ -271,7 +362,7 @@ def plot_sweep(
             ax_reward.scatter(
                 x_pts,
                 y_reward_pts,
-                color=PURPLE20,
+                color=CFO_COLOR,
                 edgecolor="black",
                 zorder=5,
                 label="_nolegend_",  # don't duplicate legend
@@ -279,7 +370,7 @@ def plot_sweep(
             ax_constraint.scatter(
                 x_pts,
                 y_constraint_pts,
-                color=PURPLE20,
+                color=CFO_COLOR,
                 edgecolor="black",
                 zorder=5,
                 label="_nolegend_",
@@ -318,17 +409,6 @@ def plot_sweep(
                 color=AM_COLOR,
             )
 
-            # scatter AM at each vertical bar (reward)
-            # pre_x0 = 0.0
-            # ax_constraint.scatter(
-            #     [pre_x0],
-            #     [am_mean],
-            #     color=AM_COLOR,
-            #     edgecolor="black",
-            #     zorder=5,
-            #     label="_nolegend_",
-            # )
-
         if am_constraint_baseline is not None:
             am_mean_c, am_std_c = am_constraint_baseline
             y_low_c = am_mean_c - am_std_c
@@ -348,17 +428,6 @@ def plot_sweep(
                 alpha=0.2,
                 color=AM_COLOR,
             )
-
-            # scatter AM at each vertical bar (constraint)
-            # pre_x0 = 0.0
-            # ax_constraint.scatter(
-            #     [pre_x0],
-            #     [am_mean_c],
-            #     color=AM_COLOR,
-            #     edgecolor="black",
-            #     zorder=5,
-            #     label="_nolegend_",
-            # )
 
         # ----- PRE (mean ± std) as horizontal dashed line + dot at beginning -----
         if plot_pre and (r_mean is not None) and (c_mean is not None):
@@ -386,16 +455,6 @@ def plot_sweep(
                 alpha=0.2,
                 color=PRE_COLOR,
             )
-            # PRE scatter at the very beginning (x = 0)
-            # pre_x0 = 0.0
-            # ax_reward.scatter(
-            #     [pre_x0],
-            #     [pre_r_mean],
-            #     color=PRE_COLOR,
-            #     edgecolor="black",
-            #     zorder=6,
-            #     label="_nolegend_",
-            # )
 
             # constraint PRE line + band
             ax_constraint.axhline(
@@ -412,15 +471,6 @@ def plot_sweep(
                 alpha=0.2,
                 color=PRE_COLOR,
             )
-            # PRE scatter at the very beginning (x = 0)
-            # ax_constraint.scatter(
-            #     [pre_x0],
-            #     [pre_c_mean],
-            #     color=PRE_COLOR,
-            #     edgecolor="black",
-            #     zorder=6,
-            #     label="_nolegend_",
-            # )
 
         # ----- constraint bound (horizontal red line on constraint only) -----
         if bound is not None:
@@ -454,13 +504,13 @@ def plot_sweep(
         fig_constraint.tight_layout()
 
         if safe_fig:
-            out_base = os.path.join(sweep_path, sweep_name)
+            out_base = os.path.join(base_dir, "zz_figures")
 
-            reward_path = f"{out_base}_reward"
+            reward_path = f"{out_base}/{sweep_name}_reward"
             fig_reward.savefig(f"{reward_path}.jpg", bbox_inches="tight")
             fig_reward.savefig(f"{reward_path}.pdf", bbox_inches="tight")
 
-            constraint_path = f"{out_base}_constraint"
+            constraint_path = f"{out_base}/{sweep_name}_constraint"
             fig_constraint.savefig(f"{constraint_path}.jpg", bbox_inches="tight")
             fig_constraint.savefig(f"{constraint_path}.pdf", bbox_inches="tight")
 
@@ -472,7 +522,7 @@ def plot_sweep(
 
 
 
-def summarize_sweep_markdown(base_dir, sweep_name, parameter_name):
+def summarize_sweep_markdown(base_dir, sweep_name, parameter_name, value_to_runs_override=None):
     """
     Build a markdown table for one sweep.
     Each row: parameter value, reward at first & last step, constraint at first & last step,
@@ -480,12 +530,18 @@ def summarize_sweep_markdown(base_dir, sweep_name, parameter_name):
 
     Returns a markdown string.
     """
-    sweep_path = os.path.join(base_dir, sweep_name)
-    value_to_runs = collect_runs_for_sweep(sweep_path)
+    if value_to_runs_override is None:
+        sweep_path = os.path.join(base_dir, sweep_name)
+        value_to_runs = collect_runs_for_sweep(sweep_path)
 
-    if not value_to_runs:
-        print(f"No runs found in {sweep_path}")
-        return ""
+        if not value_to_runs:
+            print(f"No runs found in {sweep_path}")
+            return ""
+    else:
+        value_to_runs = value_to_runs_override
+        if not value_to_runs:
+            print("No runs found in provided value_to_runs mapping.")
+            return ""
 
     rows = []
     if "CFO" in value_to_runs:
@@ -547,10 +603,19 @@ def main():
                         help="Env steps between two logged rows (your plotting freq N).")
     parser.add_argument("--sweeps_to_plot", "-s", type=str, default="al_final_v1",
                         help="Comma-separated list of sweep folder names to plot.")
+    parser.add_argument("--cfo_dir", type=str, default=None,
+                        help="Folder with CFO runs (each seed as a subfolder).")
+    parser.add_argument("--baseline_dir", type=str, default=None,
+                        help="Folder with baseline runs; subfolders like '0.01_0', '0.01_1', etc.")
+    parser.add_argument("--baseline_values", type=str, default=None,
+                        help="Comma-separated list of baseline values to include "
+                             "(e.g. '0.01,1.0'). If omitted, use all baseline values.")
     parser.add_argument("--k_update_steps", "-k", type=int, default=10,
                         help="Env-step distance between two k-updates.")
     parser.add_argument("--use_k_axis", action="store_true",
                         help="Use k instead of env steps on the x-axis.")
+    parser.add_argument("--use_cfo_color", action="store_true",
+                        help="Plot all curves in CFO purple color.")
     parser.add_argument("--reward", type=str, default="Dipole (in D)",
                         help="Reward name for plot title.")
     parser.add_argument("--constraint", type=str, default="Energy (in Ha)",
@@ -582,40 +647,87 @@ def main():
     if args.am_constraint_mean is not None and args.am_constraint_std is not None:
         am_constraint_baseline = (args.am_constraint_mean, args.am_constraint_std)
 
-    # Parse comma-separated sweeps_to_plot into a list
-    sweep_dirs = [s.strip() for s in args.sweeps_to_plot.split(",") if s.strip()]
-    sweep_dirs = find_sweep_dirs(BASE_DIR, sweep_dirs)
-    if not sweep_dirs:
-        print("No sweeps found. Check BASE_DIR / sweeps_to_plot.")
-        return
+    # If CFO and baseline dirs are given, use CFO+baseline mode
+    if args.cfo_dir is not None and args.baseline_dir is not None:
+        print("Using CFO + baseline folder mode.")
 
-    for sweep_name in sweep_dirs:
-        parts = sweep_name.split("_")
-        parameter = "_".join(parts[3:]) if len(parts) > 3 else sweep_name
-        print(f"Processing sweep: {parameter}")
+        baseline_values = args.baseline_values.split(",") if args.baseline_values is not None else None
+        value_to_runs = collect_cfo_and_baseline(
+            args.cfo_dir,
+            args.baseline_dir,
+            baseline_values=baseline_values,
+        )
+
+        # Choose some descriptive names
+        sweep_name = "cfo_vs_baseline"
+        parameter = "baseline"
 
         plot_sweep(
-            BASE_DIR,
-            sweep_name,
-            parameter,
+            base_dir=os.path.dirname(args.baseline_dir),  # anything; mainly used for saving
+            sweep_name=sweep_name,
+            parameter=parameter,
             reward=args.reward,
             constraint=args.constraint,
             font_scale=args.font_scale,
             logging_interval=args.logging_interval,
             k_update_steps=args.k_update_steps,
             use_k_axis=args.use_k_axis,
+            use_cfo_color=args.use_cfo_color,
             safe_fig=args.safe_fig,
             plot_pre=args.plot_pre,
             am_reward_baseline=am_reward_baseline,
             am_constraint_baseline=am_constraint_baseline,
             bound=args.bound,
+            value_to_runs_override=value_to_runs,
         )
 
-        table_md = summarize_sweep_markdown(BASE_DIR, sweep_name, parameter)
+        table_md = summarize_sweep_markdown(
+            base_dir=os.path.dirname(args.baseline_dir),
+            sweep_name=sweep_name,
+            parameter_name=parameter,
+            value_to_runs_override=value_to_runs,
+        )
         print()
         print(f"### Sweep: {parameter}")
         print(table_md)
         print()
+
+    else:
+        # Original behavior: BASE_DIR + sweeps_to_plot
+        sweep_dirs = [s.strip() for s in args.sweeps_to_plot.split(",") if s.strip()]
+        sweep_dirs = find_sweep_dirs(BASE_DIR, sweep_dirs)
+        if not sweep_dirs:
+            print("No sweeps found. Check BASE_DIR / sweeps_to_plot.")
+            return
+
+        for sweep_name in sweep_dirs:
+            parts = sweep_name.split("_")
+            parameter = "_".join(parts[3:]) if len(parts) > 3 else sweep_name
+            print(f"Processing sweep: {parameter}")
+
+            plot_sweep(
+                BASE_DIR,
+                sweep_name,
+                parameter,
+                reward=args.reward,
+                constraint=args.constraint,
+                font_scale=args.font_scale,
+                logging_interval=args.logging_interval,
+                k_update_steps=args.k_update_steps,
+                use_k_axis=args.use_k_axis,
+                use_cfo_color=args.use_cfo_color,
+                safe_fig=args.safe_fig,
+                plot_pre=args.plot_pre,
+                am_reward_baseline=am_reward_baseline,
+                am_constraint_baseline=am_constraint_baseline,
+                bound=args.bound,
+            )
+
+            table_md = summarize_sweep_markdown(BASE_DIR, sweep_name, parameter)
+            print()
+            print(f"### Sweep: {parameter}")
+            print(table_md)
+            print()
 
 
 if __name__ == "__main__":
@@ -623,14 +735,31 @@ if __name__ == "__main__":
 
 
 """Example usage:
-python utils/plots_sweeps_new.py \
+python utils/plots_sweeps.py \
   --sweeps_to_plot al_dipole_energy \
   --use_k_axis \
-  --am_reward_mean 8.344 \
-  --am_reward_std 0.153 \
-  --am_constraint_mean -78.011 \
-  --am_constraint_std 0.734 \
+  --use_cfo_color \
+  --am_reward_mean 8.304 \
+  --am_reward_std 0.073 \
+  --am_constraint_mean -78.311 \
+  --am_constraint_std 0.377 \
   --bound -80 \
   --plot_pre \
   --safe_fig
 """
+# parameter: python utils/plots_sweeps.py --sweeps_to_plot al_eta,al_lambda_min,al_rho_init,al_tau --use_k_axis --safe_fig --logging_interval 3 --bound -80
+# am_baseline: python utils/plots_sweeps.py --sweeps_to_plot am_total_steps --safe_fig --logging_interval 3 --bound -80
+# fixed_baseline: python utils/plots_sweeps.py --sweeps_to_plot fixed_baseline_dipole_energy --safe_fig --bound -80
+
+"""
+python utils/plots_sweeps_new.py \
+  --logging_interval 2 \
+  --k_update_steps 10 \
+  --use_k_axis \
+  --cfo_dir /Users/svlg/MasterThesis/v03_geom/aa_experiments/al_dipole_energy \
+  --baseline_dir /Users/svlg/MasterThesis/v03_geom/aa_experiments/fixed_baseline_dipole_energy \
+  --baseline_values 0.01,1.0,100.0 \
+  --safe_fig \
+  --bound -80 
+"""
+
