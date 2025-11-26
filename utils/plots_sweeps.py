@@ -202,6 +202,7 @@ def plot_sweep(
     use_cfo_color=False,
     plot_pre=False,
     base_line_comparison=False,
+    show_true=False,
     safe_fig=False,
     am_reward_baseline=None,
     am_constraint_baseline=None,
@@ -288,11 +289,19 @@ def plot_sweep(
 
             reward_arr = load_metric_arrays(run_dirs, "reward")
             constraint_arr = load_metric_arrays(run_dirs, "constraint")
+            if show_true:
+                true_reward_arr = load_metric_arrays(run_dirs, f"feat/dipole")
+                true_constraint_arr = load_metric_arrays(run_dirs, f"feat/energy")
+
             if reward_arr is None or constraint_arr is None:
                 continue
 
             r_mean, r_low, r_high = mean_and_ci(reward_arr)
             c_mean, c_low, c_high = mean_and_ci(constraint_arr)
+
+            if show_true:
+                true_r_mean, true_r_low, true_r_high = mean_and_ci(true_reward_arr)
+                true_c_mean, true_c_low, true_c_high = mean_and_ci(true_constraint_arr)
 
             T = len(r_mean)
             # env steps for each logged row
@@ -323,13 +332,29 @@ def plot_sweep(
             else:
                 color, label = style_for_name(value_str)
 
-            # reward
-            ax_reward.plot(x, r_mean, label=label, color=color)
-            ax_reward.fill_between(x, r_low, r_high, alpha=0.2, color=color)
+            if not show_true:
+                # reward
+                ax_reward.plot(x, r_mean, label=label, color=color)
+                ax_reward.fill_between(x, r_low, r_high, alpha=0.2, color=color)
 
-            # constraint
-            ax_constraint.plot(x, c_mean, label=label, color=color)
-            ax_constraint.fill_between(x, c_low, c_high, alpha=0.2, color=color)
+                # constraint
+                ax_constraint.plot(x, c_mean, label=label, color=color)
+                ax_constraint.fill_between(x, c_low, c_high, alpha=0.2, color=color)
+
+            if show_true:
+                ax_reward.plot(x, r_mean, label="CFO", color=PREDICTED_COLOR)
+                ax_reward.fill_between(x, r_low, r_high, alpha=0.2, color=PREDICTED_COLOR)
+
+                # constraint
+                ax_constraint.plot(x, c_mean, label="CFO", color=PREDICTED_COLOR)
+                ax_constraint.fill_between(x, c_low, c_high, alpha=0.2, color=PREDICTED_COLOR)
+                # true reward
+                ax_reward.plot(x, true_r_mean, label=f"True", color=TRUE_COLOR)
+                ax_reward.fill_between(x, true_r_low, true_r_high, alpha=0.2, color=TRUE_COLOR)
+
+                # true constraint
+                ax_constraint.plot(x,true_c_mean,label="True",color=TRUE_COLOR)
+                ax_constraint.fill_between(x,true_c_low,true_c_high,alpha=0.2,color=TRUE_COLOR)
 
             # if this is the CFO group, remember its curve for dots
             if value_str == "CFO":
@@ -354,7 +379,7 @@ def plot_sweep(
                     ax.axvline(x=xv, linestyle="--", alpha=0.3)
 
         # ----- dots where CFO curve meets each vertical bar -----
-        if (vlines_x is not None) and (cfo_x is not None):
+        if (vlines_x is not None) and (cfo_x is not None) and not show_true:
             v_arr = np.asarray(vlines_x, dtype=float)
 
             # for each vertical line, find nearest CFO index
@@ -384,10 +409,10 @@ def plot_sweep(
         if use_k_axis and k_update_steps is not None:
             # integer ticks: 1, 2, ..., floor(max_k)
             max_k = max_step / float(k_update_steps)
-            xticks = np.arange(0, int(np.floor(max_k)))
+            xticks = [i for i in range(0, int(np.floor(max_k)+1), 1)]
             for ax in (ax_reward, ax_constraint):
                 ax.set_xticks(xticks)
-                ax.set_xticklabels([str(i + 1) for i in xticks])
+                ax.set_xticklabels([str(i) for i in xticks])
 
         # common x-range for horizontal bands/lines
         xs_baseline = np.array([0.0, xmax]) if xmax > 0 else np.array([0.0, 1.0])
@@ -480,14 +505,14 @@ def plot_sweep(
         if bound is not None:
             ax_constraint.axhline(
                 bound,
-                linestyle="-",
+                linestyle="--",
                 linewidth=2.0,
                 color=BOUND_COLOR,
-                label="bound",
+                label=f"Bound: {bound} Ha",
             )
 
         # ----- formatting and saving -----
-        xlabel = "K" if (use_k_axis and k_update_steps is not None) else "N"
+        xlabel = r'$\pi_K$' if (use_k_axis and k_update_steps is not None) else "N"
 
         # reward figure formatting
         ax_reward.set_xlabel(xlabel)
@@ -626,6 +651,8 @@ def main():
                         help="Reward name for plot title.")
     parser.add_argument("--constraint", type=str, default="Energy (in Ha)",
                         help="Constraint name for plot title.")
+    parser.add_argument("--show_true", action="store_true",
+                        help="Also plot true reward/constraint if available.")
     parser.add_argument("--am_reward_mean", type=float, default=None,
                         help="If set, draw horizontal AM reward mean line.")
     parser.add_argument("--am_reward_std", type=float, default=None,
@@ -667,9 +694,8 @@ def main():
         # Choose some descriptive names
         sweep_name = "cfo_vs_baseline"
         parameter = "baseline"
-
         plot_sweep(
-            base_dir=os.path.dirname(args.baseline_dir),  # anything; mainly used for saving
+            base_dir=os.path.dirname(args.baseline_dir),
             sweep_name=sweep_name,
             parameter=parameter,
             reward=args.reward,
@@ -723,6 +749,7 @@ def main():
                 k_update_steps=args.k_update_steps,
                 use_k_axis=args.use_k_axis,
                 use_cfo_color=args.use_cfo_color,
+                show_true=args.show_true,
                 safe_fig=args.safe_fig,
                 plot_pre=args.plot_pre,
                 am_reward_baseline=am_reward_baseline,
@@ -759,7 +786,7 @@ python utils/plots_sweeps.py \
 # fixed_baseline: python utils/plots_sweeps.py --sweeps_to_plot fixed_baseline_dipole_energy --safe_fig --bound -80
 
 """
-python utils/plots_sweeps_new.py \
+python utils/plots_sweeps.py \
   --logging_interval 2 \
   --k_update_steps 10 \
   --use_k_axis \
