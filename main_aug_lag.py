@@ -102,7 +102,7 @@ def main():
         save_path = save_path / Path(f"{config.experiment}") / Path(f"{config.seed}_{wandb.run.id}")
     else:
         save_path = save_path / Path(f"{config.experiment}") / Path(f"{run_name}")
-    if (args.save_samples or args.save_model or args.save_plots) and not args.debug:
+    if (args.save_samples or args.save_model or args.save_plots) and not args.debug and not use_wandb:
         save_path = save_path / Path(run_name)
         save_path.mkdir(parents=True, exist_ok=True)
         print(f"Run will be saved at:")
@@ -252,6 +252,7 @@ def main():
     # Compare with true value
     pred_rc = augmented_reward.get_reward_constraint()
     log_pred_vs_real, _, _ = pred_vs_real(rd_mols, dgl_mols, pred_rc, reward=config.reward.fn, constraint=config.constraint.fn)
+    full_stats[-1].update(log_pred_vs_real)
 
     al_lowest_const = full_stats[-1]["constraint"]
     al_best_reward = full_stats[-1]["reward"]
@@ -281,6 +282,9 @@ def main():
         models_list = []
 
     #### AUGMENTED LAGRANGIAN - BEGIN ####
+
+    alg_time = time.time()
+
     total_steps_made = 0
     for k in range(1, lagrangian_updates + 1):
         print(f"--- AL Round {k}/{lagrangian_updates} ---", flush=True)
@@ -401,6 +405,12 @@ def main():
 
         alm.update_lambda_rho(dgl_mols)
         del dgl_mols, rd_mols, trainer
+
+    alg_time = time.time() - alg_time
+    print()
+    print(f"--- Finished --- {config.total_steps} total-steps---", flush=True)
+    print(f"Time: {alg_time/60:.2f} mins", flush=True)
+    print()
 
     # Finish wandb run
     if use_wandb:
