@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # prepare_mols_all.py
-# DGL .bin -> RDKit (all graphs) -> ensure 3D -> write .mol to prepared/
-# Filters out molecules that are not fully connected
+# DGL .bin -> RDKit (all graphs) -> ensure 3D -> validate -> write .mol under prepared/iterXX/
+# Skips molecules that are not fully connected
 
 import argparse, re, sys
 from pathlib import Path
@@ -69,6 +69,28 @@ def ensure_3d(mol):
     except Exception:
         return None
 
+def validate_mol(mol: Chem.Mol) -> Chem.Mol:
+    """Supervisor-provided validity check. Returns validated mol or None if invalid."""
+    try:
+        Chem.RemoveStereochemistry(mol)
+        Chem.AssignStereochemistry(mol, cleanIt=True, force=True)
+        Chem.AssignStereochemistryFrom3D(mol)
+
+        for a in mol.GetAtoms():
+            a.SetNoImplicit(True)
+            if a.HasProp("_MolFileHCount"):
+                a.ClearProp("_MolFileHCount")
+
+        flags = Chem.SanitizeFlags.SANITIZE_ALL & ~Chem.SanitizeFlags.SANITIZE_ADJUSTHS
+        err = Chem.SanitizeMol(mol, sanitizeOps=flags, catchErrors=True)
+        if err:
+            return None
+        else:
+            mol.UpdatePropertyCache(strict=True)
+            return mol
+    except Exception:
+        return None
+
 def write_mol_safe(mol, out_path: Path, overwrite=False) -> bool:
     """Atomic write to .mol; skip if exists unless overwrite."""
     try:
@@ -86,23 +108,13 @@ def write_mol_safe(mol, out_path: Path, overwrite=False) -> bool:
         return False
 
 # --- main ---------------------------------------------------------
-def main():
-    ap = argparse.ArgumentParser(description="Prepare 3D .mol files from all molecules in DGL .bin samples (connected only).")
-    ap.add_argument("--root", default="/Users/svlg/MasterThesis/v03_geom/aa_experiments/",
-                    help="Root folder that contains experiment dirs (default: your path)")
-    ap.add_argument("--experiment", default="0923_2305_al_dipole_energy",
-                    help="Experiment name (default matches your example)")
-    ap.add_argument("--seed", type=int, default=1, help="Seed suffix in folder name (default: 1)")
-    ap.add_argument("--outdir", default="prepared", help="Output subfolder name (default: prepared)")
-    ap.add_argument("--overwrite", action="store_true", help="Overwrite existing .mol files")
-    args = ap.parse_args()
-
+def main(args):
     base = Path(args.root).expanduser().resolve() / f"{args.experiment}_{args.seed}"
     samples_dir = base / "samples"
-    prepared_dir = base / args.outdir
+    prepared_root = base / args.outdir
     if not samples_dir.is_dir():
         die(f"Samples folder not found: {samples_dir}")
-    prepared_dir.mkdir(parents=True, exist_ok=True)
+    prepared_root.mkdir(parents=True, exist_ok=True)
 
     sample_files = sorted(
         [p for p in samples_dir.iterdir() if p.suffix == ".bin"],
@@ -111,7 +123,8 @@ def main():
     if not sample_files:
         die(f"No .bin files found in {samples_dir}")
 
-    total = success = failed = skipped = 0
+    grand_total = grand_success = grand_failed = grand_skipped = 0
+
     for sfile in sample_files:
         try:
             graphs, _ = load_graphs(str(sfile))
@@ -121,38 +134,71 @@ def main():
 
         n = len(graphs)
         iter_id = numeric_key(sfile.name)
-        base_stub = f"iter_{iter_id:06d}" if iter_id >= 0 else sfile.stem
-        print(f"[INFO] {sfile.name}: {n} graphs -> processing all")
+        # folder per .bin "iteration": prepared/iterXX (2 digits if small; else as-is)
+        iter_tag = f"{iter_id:02d}" if (0 <= iter_id < 100) else (f"{iter_id}" if iter_id >= 0 else sfile.stem)
+        iter_dir = prepared_root / f"iter{iter_tag}"
+        iter_dir.mkdir(parents=True, exist_ok=True)
+
+        print(f"[INFO] {sfile.name}: {n} graphs -> processing into {iter_dir}")
+
+        total = success = failed = skipped = 0  # per-bin counters
 
         for j in range(n):
             total += 1
+            grand_total += 1
             try:
                 sm = SampledMolecule(graphs[j], atom_type_map)
                 rd = getattr(sm, "rdkit_mol", None)
                 if rd is None:
                     print(f"[WARN] idx {j:03d}: rdkit_mol is None")
-                    failed += 1
+                    failed += 1; grand_failed += 1
                     continue
+
                 if not is_connected(rd):
                     print(f"[SKIP] idx {j:03d}: molecule is disconnected")
-                    skipped += 1
+                    skipped += 1; grand_skipped += 1
                     continue
+
                 rd3d = ensure_3d(rd)
                 if rd3d is None:
                     print(f"[WARN] idx {j:03d}: 3D generation failed")
-                    failed += 1
+                    failed += 1; grand_failed += 1
                     continue
-                out_name = f"{base_stub}_idx_{j:03d}.mol"
-                out_path = prepared_dir / out_name
-                if write_mol_safe(rd3d, out_path, overwrite=args.overwrite):
-                    success += 1
+
+                # Validate before writing
+                rd_valid = validate_mol(Chem.Mol(rd3d))
+                if rd_valid is None:
+                    print(f"[WARN] idx {j:03d}: validation failed (sanitize/stereo)")
+                    failed += 1; grand_failed += 1
+                    continue
+
+                out_name = f"{sfile.stem}_idx_{j:03d}.mol"
+                out_path = iter_dir / out_name
+                if write_mol_safe(rd_valid, out_path, overwrite=args.overwrite):
+                    success += 1; grand_success += 1
                 else:
-                    failed += 1
+                    failed += 1; grand_failed += 1
+
             except Exception as e:
                 print(f"[WARN] idx {j:03d}: conversion failed: {e}")
-                failed += 1
+                failed += 1; grand_failed += 1
 
-    print(f"[DONE] Tried {total} | wrote {success} | failed {failed} | skipped (disconnected) {skipped} | output: {prepared_dir}")
+        # per-inner-iteration (per .bin) summary
+        print(f"[DONE] Tried {total} | wrote {success} | failed {failed} | "
+              f"skipped (disconnected) {skipped} | output: {iter_dir}")
+
+    # grand summary
+    print(f"[DONE][TOTAL] Tried {grand_total} | wrote {grand_success} | failed {grand_failed} | "
+          f"skipped (disconnected) {grand_skipped} | output root: {prepared_root}")
 
 if __name__ == "__main__":
-    main()
+    ap = argparse.ArgumentParser(description="Prepare 3D .mol files from all molecules in DGL .bin samples (connected only).")
+    ap.add_argument("--root", default="/Users/svlg/MasterThesis/v03_geom/aa_experiments/",
+                    help="Root folder that contains experiment dirs (default: your path)")
+    ap.add_argument("--experiment", default="0923_2305_al_dipole_energy",
+                    help="Experiment name (default matches your example)")
+    ap.add_argument("--seed", type=int, default=1, help="Seed suffix in folder name (default: 1)")
+    ap.add_argument("--outdir", default="prepared", help="Output subfolder name (default: prepared)")
+    ap.add_argument("--overwrite", action="store_true", help="Overwrite existing .mol files")
+    main(ap.parse_args())
+
