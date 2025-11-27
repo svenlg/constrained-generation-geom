@@ -215,7 +215,7 @@ def lipinski_violations(mol: Chem.Mol) -> int:
 
 
 # --- main analysis ------------------------------------------------
-def analyze(root: Path, outdir: str, overwrite_mol: bool = False):
+def analyze(root: Path, outdir: str, cfo_folder: str, am_folder: str = None, overwrite_mol: bool = False):
     """
     Walk AL/AM folders, compute stats, optionally write .mol files.
 
@@ -224,12 +224,14 @@ def analyze(root: Path, outdir: str, overwrite_mol: bool = False):
         agg_full : DataFrame with global stats + mean/CI across seeds
     """
     # (label, folder_name)
-    algos = [("AL", "al_time_and_samples"),
-             ("AM", "am_time_and_samples")]
+    algos = [("CFO", cfo_folder),
+             ("AM", am_folder)]
 
     records = []  # per (algo, seed, iteration) aggregate
 
     for algo_label, algo_folder in algos:
+        if algo_folder is None:
+            continue
         algo_root = root / algo_folder
         if not algo_root.is_dir():
             print(f"[WARN] Algorithm folder not found: {algo_root}")
@@ -351,7 +353,7 @@ def analyze(root: Path, outdir: str, overwrite_mol: bool = False):
                 )
 
     if not records:
-        die("No records collected – check your paths / data.")
+        die("No records collected - check your paths / data.")
 
     df = pd.DataFrame.from_records(records)
 
@@ -457,7 +459,7 @@ def print_markdown_tables_no_ci(agg: pd.DataFrame):
     Print markdown tables WITHOUT confidence intervals.
 
     Rows: iteration
-    Columns: AL, AM
+    Columns: CFO, AM
     """
     def metric_table(metric, pretty_name, fmt=".3f"):
         pivot = (
@@ -528,12 +530,22 @@ def main():
     ap.add_argument(
         "--root",
         default="/Users/svlg/MasterThesis/v03_geom/aa_experiments/",
-        help="Root folder that contains al_time_and_samples and am_time_and_samples.",
+        help="Root folder.",
     )
     ap.add_argument(
         "--outdir",
         default="prepared",
         help="Subfolder under each seed where valid .mol files are written (default: prepared).",
+    )
+    ap.add_argument(
+        "--cfo-folder",
+        default="cfo_time_and_samples",
+        help="Subfolder under each seed for CFO molecules (default: cfo_time_and_samples).",
+    )
+    ap.add_argument(
+        "--am-folder",
+        default=None,
+        help="Subfolder under each seed for AM molecules (default: am_time_and_samples).",
     )
     ap.add_argument(
         "--overwrite-mol",
@@ -542,7 +554,7 @@ def main():
     )
     ap.add_argument(
         "--csv",
-        default="al_am_mols_stats",
+        default="cfo_mols_stats",
         help="Base name (no extension) to save CSVs under the root folder.",
     )
 
@@ -552,6 +564,8 @@ def main():
     agg_base, agg_full = analyze(
         root=root,
         outdir=args.outdir,
+        cfo_folder=args.cfo_folder,
+        am_folder=args.am_folder,
         overwrite_mol=args.overwrite_mol,
     )
 
@@ -577,3 +591,13 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+"""
+python mols_stats_analyze.py \
+    --root /Users/svlg/MasterThesis/v03_geom/aa_experiments/ \
+    --outdir prepared \
+    --cfo-folder cfo_rl_25 \
+    --am-folder am_rl_25 \
+    --csv cfo_am_rl_25
+"""

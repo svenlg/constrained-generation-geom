@@ -241,7 +241,7 @@ def plot_sweep(
         "axes.labelsize": base_fs * 1.1,
         "xtick.labelsize": base_fs * 1.0,
         "ytick.labelsize": base_fs * 1.0,
-        "legend.fontsize": base_fs * 0.95,
+        "legend.fontsize": base_fs * 0.90,
         "axes.linewidth": 1.5,
     }
 
@@ -368,7 +368,7 @@ def plot_sweep(
             if use_k_axis:
                 # in k-space, bars at k = 1,2,3,... up to max_k
                 max_k = max_step / float(k_update_steps)
-                k_vals = np.arange(0, np.floor(max_k), 1.0)
+                k_vals = np.arange(0, np.floor(max_k)+1, 1.0)
                 vlines_x = k_vals
             else:
                 # in env-step space, bars at 0, k, 2k, ...
@@ -519,7 +519,7 @@ def plot_sweep(
         ax_reward.set_ylabel(f"{reward}")
         ax_reward.set_title("Reward")
         ax_reward.grid(True, alpha=0.3)
-        ax_reward.set_xlim(0, xmax)
+        ax_reward.set_xlim(0-0.1, xmax+0.1)
         ax_reward.legend()
         fig_reward.tight_layout()
 
@@ -528,7 +528,7 @@ def plot_sweep(
         ax_constraint.set_ylabel(f"{constraint}")
         ax_constraint.set_title("Constraint")
         ax_constraint.grid(True, alpha=0.3)
-        ax_constraint.set_xlim(0, xmax)
+        ax_constraint.set_xlim(0-0.1, xmax+0.1)
         ax_constraint.legend(loc="lower left")
         fig_constraint.tight_layout()
 
@@ -769,17 +769,17 @@ if __name__ == "__main__":
 
 
 """Example usage:
-python utils/plots_sweeps.py \
-  --sweeps_to_plot al_dipole_energy \
-  --use_k_axis \
-  --use_cfo_color \
-  --am_reward_mean 8.304 \
-  --am_reward_std 0.073 \
-  --am_constraint_mean -78.311 \
-  --am_constraint_std 0.377 \
-  --bound -80 \
-  --plot_pre \
-  --safe_fig
+    python utils/plots_sweeps.py \
+    --sweeps_to_plot cfo_dipole_energy \
+    --use_k_axis \
+    --use_cfo_color \
+    --am_reward_mean 8.304 \
+    --am_reward_std 0.073 \
+    --am_constraint_mean -78.311 \
+    --am_constraint_std 0.377 \
+    --bound -80 \
+    --plot_pre \
+    --safe_fig
 """
 # parameter: python utils/plots_sweeps.py --sweeps_to_plot al_eta,al_lambda_min,al_rho_init,al_tau --use_k_axis --safe_fig --logging_interval 3 --bound -80
 # am_baseline: python utils/plots_sweeps.py --sweeps_to_plot am_total_steps --safe_fig --logging_interval 3 --bound -80
