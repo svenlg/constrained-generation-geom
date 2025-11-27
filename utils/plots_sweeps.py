@@ -192,7 +192,7 @@ def mean_ci_scalar(samples):
 def plot_sweep(
     base_dir,
     sweep_name,
-    parameter,
+    output_name=None,
     reward="Dipole",
     constraint="Energy",
     font_scale=2.0,
@@ -535,11 +535,17 @@ def plot_sweep(
         if safe_fig:
             out_base = os.path.join(base_dir, "zz_figures")
 
-            reward_path = f"{out_base}/{sweep_name}_reward"
+            if output_name is not None:
+                reward_path = f"{out_base}/{output_name}_reward"
+            else:
+                reward_path = f"{out_base}/{sweep_name}_reward"
             fig_reward.savefig(f"{reward_path}.jpg", bbox_inches="tight")
             fig_reward.savefig(f"{reward_path}.pdf", bbox_inches="tight")
 
-            constraint_path = f"{out_base}/{sweep_name}_constraint"
+            if output_name is not None:
+                constraint_path = f"{out_base}/{output_name}_constraint"
+            else:
+                constraint_path = f"{out_base}/{sweep_name}_constraint"
             fig_constraint.savefig(f"{constraint_path}.jpg", bbox_inches="tight")
             fig_constraint.savefig(f"{constraint_path}.pdf", bbox_inches="tight")
 
@@ -636,6 +642,8 @@ def main():
                         help="Folder with CFO runs (each seed as a subfolder).")
     parser.add_argument("--baseline_dir", type=str, default=None,
                         help="Folder with baseline runs; subfolders like '0.01_0', '0.01_1', etc.")
+    parser.add_argument("--output_name", type=str, default=None,
+                        help="If set, use this as output file name base instead of sweep name.")
     parser.add_argument("--baseline_values", type=str, default=None,
                         help="Comma-separated list of baseline values to include "
                              "(e.g. '0.01,1.0'). If omitted, use all baseline values.")
@@ -697,7 +705,7 @@ def main():
         plot_sweep(
             base_dir=os.path.dirname(args.baseline_dir),
             sweep_name=sweep_name,
-            parameter=parameter,
+            output_name=args.output_name,
             reward=args.reward,
             constraint=args.constraint,
             font_scale=args.font_scale,
@@ -797,3 +805,31 @@ python utils/plots_sweeps.py \
   --bound -80 
 """
 
+"""Example usage:
+    python utils/plots_sweeps.py \
+    --sweeps_to_plot cfo_rl_50,cfo_rl_30,cfo_rl_25,cfo_rl_1 \
+    --output_name cfo_rl \
+    --use_k_axis \
+    --use_cfo_color \
+    --am_reward_mean 8.304 \
+    --am_reward_std 0.073 \
+    --am_constraint_mean -78.311 \
+    --am_constraint_std 0.377 \
+    --bound -80 \
+    --plot_pre \
+    --safe_fig
+"""
+
+"""Example usage:
+    python utils/plots_sweeps.py \
+    --sweeps_to_plot am_rl_50,am_rl_25,am_rl_1 \
+    --output_name am_rl \
+    --use_cfo_color \
+    --am_reward_mean 8.304 \
+    --am_reward_std 0.073 \
+    --am_constraint_mean -78.311 \
+    --am_constraint_std 0.377 \
+    --bound -80 \
+    --plot_pre \
+    --safe_fig
+"""
