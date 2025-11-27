@@ -22,3 +22,4 @@ def set_seed(seed: int):
     torch.cuda.manual_seed_all(seed)
     np.random.seed(seed)
     dgl.random.seed(seed)
+    dgl.seed(seed)

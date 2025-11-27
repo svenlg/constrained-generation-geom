@@ -118,7 +118,7 @@ class AugmentedReward:
     def _unscale_full_grads_inplace(self, grads_list):
         """Remove the alpha scaling applied to the full objective before logging."""
         for g in grads_list:
-            if g is not None:
+            if g is not None and self.alpha > 0.0:
                 g /= self.alpha
 
     def __call__(self, x: Union[torch.Tensor, dgl.DGLGraph]) -> torch.Tensor:

@@ -436,8 +436,38 @@ class AdjointMatchingFinetuningTrainerFlowMol:
         # self.fine_model.zero_grad()
         loss.backward(retain_graph=False)
 
-        if self.clip_grad_norm > 0.0:
-            torch.nn.utils.clip_grad_norm_(self.fine_model.parameters(), self.clip_grad_norm)
+        if self.verbose:
+            # ---- GRADIENT ANALYSIS ----
+            # Collect all gradients into a single flat vector (before clipping)
+            grads_before = []
+            for p in self.fine_model.parameters():
+                if p.grad is not None:
+                    grads_before.append(p.grad.view(-1))
+            grad_before_vec = torch.cat(grads_before)
+
+            # Compute L2 norm BEFORE clipping
+            grad_norm_before = grad_before_vec.norm(2).item()
+            print(f"Gradient L2 norm before clipping: {grad_norm_before:.6f}")
+
+            # 3. Clip gradients (optionally)
+            if self.clip_grad_norm > 0.0:
+                torch.nn.utils.clip_grad_norm_(self.fine_model.parameters(), self.clip_grad_norm)
+
+            # Collect gradients again (AFTER clipping)
+            grads_after = []
+            for p in self.fine_model.parameters():
+                if p.grad is not None:
+                    grads_after.append(p.grad.view(-1))
+            grad_after_vec = torch.cat(grads_after)
+
+            # Compute L2 norm AFTER clipping
+            grad_norm_after = grad_after_vec.norm(2).item()
+            print(f"Gradient L2 norm after clipping:  {grad_norm_after:.6f}")
+            # ---- END GRADIENT ANALYSIS ----
+
+        else:
+            if self.clip_grad_norm > 0.0:
+                torch.nn.utils.clip_grad_norm_(self.fine_model.parameters(), self.clip_grad_norm)
 
         self.optimizer.step()
 

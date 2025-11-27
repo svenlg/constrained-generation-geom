@@ -170,6 +170,10 @@ def main():
     print(f"Start time: {start_time}", flush=True)
     print(f"Device: {device}", flush=True)
     start_time = time.time()
+    
+    if config.seed is not None:
+        print(f"--- SEED ---", flush=True)
+        print(f"Using seed: {config.seed}", flush=True)
 
     print(f"--- Config ---", flush=True)
     print(f"Augmented Lagrangian Parameters", flush=True)
@@ -408,7 +412,7 @@ def main():
 
     alg_time = time.time() - alg_time
     print()
-    print(f"--- Finished --- {config.total_steps} total-steps---", flush=True)
+    print(f"--- Finished --- {total_steps_made} total-steps---", flush=True)
     print(f"Time: {alg_time/60:.2f} mins", flush=True)
     print()
 
