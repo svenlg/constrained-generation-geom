@@ -247,7 +247,7 @@ class AdjointMatchingFinetuningTrainerFlowMol:
 
         # Reward_lambda and LCT and clip_grad_norm
         reward_lambda = config.get("reward_lambda", 1.0)
-        lct = config.get("lct", None)
+        lct = config.get("lct", 0.0)
         self.LCT = lct * reward_lambda**2 if lct > 0.0 else 0.0
         self.clip_grad_norm = config.get("clip_grad_norm", 1.0)
 
