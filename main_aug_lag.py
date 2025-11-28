@@ -186,6 +186,7 @@ def main():
         print(f"\teta: {config.augmented_lagrangian.eta}", flush=True)
         print(f"\tau: {config.augmented_lagrangian.tau}", flush=True)
         print(f"\tlambda_min: {config.augmented_lagrangian.lambda_min}", flush=True)
+        print(f"\tnum_constraint_estimation_samples: {config.augmented_lagrangian.sampling.num_samples}", flush=True)
 
     print(f"Adjoint Matching Parameters", flush=True)
     print(f"\treward_lambda: {reward_lambda}", flush=True)
@@ -234,7 +235,7 @@ def main():
     # Generate Samples
     tmp_model = copy.deepcopy(fine_model)
     dgl_mols, rd_mols = sampling(
-        config.reward_sampling,
+        config.augmented_lagrangian.sampling,
         tmp_model,
         device=device,
         n_atoms=n_atoms,

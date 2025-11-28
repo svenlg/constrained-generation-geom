@@ -45,6 +45,8 @@ def parse_arguments():
                         help="Override tau in config")
     parser.add_argument("--lambda_min", type=float,
                         help="Override eta in config")
+    parser.add_argument("--num_constraint_estimation_samples", type=int,
+                        help="Override augmented_lagrangian.sampling.num_samples in config")
     parser.add_argument("--baseline", action='store_true',
                         help="Do baseline, default: false")
     parser.add_argument("--base_lambda", type=float,
@@ -123,6 +125,8 @@ def update_config_with_args(config, args):
         config.augmented_lagrangian.tau = args.tau
     if args.lambda_min is not None:
         config.augmented_lagrangian.lambda_min = args.lambda_min
+    if args.num_constraint_estimation_samples is not None:
+        config.augmented_lagrangian.sampling.num_samples = args.num_constraint_estimation_samples
     if args.baseline:
         config.augmented_lagrangian.baseline = True
     if args.base_lambda is not None:

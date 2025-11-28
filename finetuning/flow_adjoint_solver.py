@@ -108,8 +108,8 @@ class LeanAdjointSolverFlow:
             g_t = graph_trajectories[i]
             alpha = alpha_s[i]
             alpha_dot = alpha_dot_s[i]
-            # adj, v_pred = step(
-            v_pred, adj = step(
+            # v_pred, adj = step(
+            adj, v_pred = step(
                 model = self.model,
                 adj = adj, 
                 g_t = g_t, 
