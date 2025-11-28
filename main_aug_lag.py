@@ -235,7 +235,7 @@ def main():
     # Generate Samples
     tmp_model = copy.deepcopy(fine_model)
     dgl_mols, rd_mols = sampling(
-        config.augmented_lagrangian.sampling,
+        config.reward_sampling,
         tmp_model,
         device=device,
         n_atoms=n_atoms,
@@ -395,7 +395,7 @@ def main():
         # Generate Samples and update the augmented lagrangian parameters
         tmp_model = copy.deepcopy(fine_model)
         dgl_mols, rd_mols = sampling(
-            config.reward_sampling,
+            config.augmented_lagrangian.sampling,
             tmp_model,
             device=device,
             n_atoms=n_atoms,
