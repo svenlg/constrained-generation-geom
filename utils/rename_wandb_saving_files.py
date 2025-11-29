@@ -3,9 +3,9 @@ import yaml
 import shutil
 
 BASE_DIR = "/cluster/home/sgutjahr/MasterThesis/constrained-generation-geom/aa_experiments"
-FOLDER_NAME = "baseline_dipole_energy_final"  # change this if your root folder is different
+FOLDER_NAME = "cfo_num_constraint_estimation_samples"  # change this if your root folder is different
 BASE_DIR = os.path.join(BASE_DIR, FOLDER_NAME)
-PARAMETER_NAME = "lambda_init"
+PARAMETER_NAME = "num_samples"
 
 for name in os.listdir(BASE_DIR):
     folder = os.path.join(BASE_DIR, name)
@@ -27,8 +27,9 @@ for name in os.listdir(BASE_DIR):
         config = yaml.safe_load(f)
 
     parameter_value = (
-        config.get("augmented_lagrangian", {}).get(PARAMETER_NAME)
-        or config.get(PARAMETER_NAME)
+        config.get(PARAMETER_NAME) or
+        config.get("augmented_lagrangian", {}).get(PARAMETER_NAME) or
+        config.get("augmented_lagrangian", {}).get("sampling", {}).get(PARAMETER_NAME)
     )
 
     if parameter_value is None:
