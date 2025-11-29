@@ -28,9 +28,15 @@ def step(model, adj, g_t, t, alpha, alpha_dot, dt, upper_edge_mask, calc_adj=Tru
         v = {}
         v_pred = {}
         
-        for feat in ['x', 'a', 'c']:
+        for feat in ['x', 'a', 'c', 'e']:
+
             x_1 = dst_dict[feat]
-            x_t = g_t.ndata[f'{feat}_t']
+
+            if feat == 'e':
+                x_t = g_t.edata[f'{feat}_t'][upper_edge_mask]
+            else:
+                x_t = g_t.ndata[f'{feat}_t']
+
             if calc_adj:
                 adj_t_feat = adj[feat].detach()
 
@@ -40,20 +46,7 @@ def step(model, adj, g_t, t, alpha, alpha_dot, dt, upper_edge_mask, calc_adj=Tru
                 eps_pred = 2 * v_pred[feat] - alpha_dot[0]/(alpha[0]+dt) * x_t
                 g_term = (adj_t_feat * eps_pred).sum()
                 v[feat] = torch.autograd.grad(g_term, x_t, retain_graph=True)[0]
-
-        for feat in ['e']:
-            x_1 = dst_dict[feat]
-            x_t = g_t.edata[f'{feat}_t'][upper_edge_mask]
-
-            if calc_adj:
-                adj_t_feat = adj[feat].detach()
-
-            v_pred[feat] = model.vector_field.vector_field(x_t, x_1, alpha[0], alpha_dot[0])
-            if calc_adj:
-                eps_pred = 2 * v_pred[feat] - alpha_dot[0]/(alpha[0]+dt) * x_t
-                g_term = (adj_t_feat * eps_pred).sum()
-                v[feat] = torch.autograd.grad(g_term, x_t, retain_graph=False)[0]
-
+    
     adj_tmh = {}
     if calc_adj:
         for feat in ['x', 'a', 'c', 'e']:
@@ -98,18 +91,22 @@ class LeanAdjointSolverFlow:
             adj['ue_mask'] = minus_adj.edata['ue_mask'].detach().clone()
 
         trajs_adj = []
-        traj_v_pred = []
+        traj_v_base = []
         upper_edge_mask = g1.edata['ue_mask'] # (edges, 1)
         adj['e'] = adj['e'][upper_edge_mask]
-        # trajs_pos = []
+
+        # for logging save norm of adj at t=1
+        adj_0_norm = 0.0
+        for feat in ['x', 'a', 'c', 'e']:
+            adj_0_norm += torch.norm(adj[feat]).item()
 
         for i in range(1, T):
             t = ts[i]
             g_t = graph_trajectories[i]
             alpha = alpha_s[i]
             alpha_dot = alpha_dot_s[i]
-            # v_pred, adj = step(
-            adj, v_pred = step(
+            # v_base, adj = step(
+            adj, v_base = step(
                 model = self.model,
                 adj = adj, 
                 g_t = g_t, 
@@ -121,7 +118,7 @@ class LeanAdjointSolverFlow:
                 calc_adj=True
             )
             trajs_adj.append(adj)
-            traj_v_pred.append(v_pred)
+            traj_v_base.append(v_base)
         
         res = {
             't': ts[1:], # (T,)
@@ -129,12 +126,12 @@ class LeanAdjointSolverFlow:
             'alpha_dot': alpha_dot_s[1:], # (T, 4)
             'traj_graph': graph_trajectories[1:], # list of dgl graphs (T,)
             'traj_adj': trajs_adj, # list of dicts with {x, a, c, e} each (T,)
-            'traj_v_pred': traj_v_pred, # list of dicts with {x, a, c, e} each (T,)
+            'traj_v_base': traj_v_base, # list of dicts with {x, a, c, e} each (T,)
         }
 
-        assert len(res['traj_adj']) == len(res['traj_v_pred'])
+        assert len(res['traj_adj']) == len(res['traj_v_base'])
         assert len(res['traj_adj']) == res['t'].shape[0]
         assert len(res['traj_graph']) == res['t'].shape[0]
         assert res['alpha'].shape[0] == res['t'].shape[0] and res['alpha_dot'].shape[0] == res['t'].shape[0]
         assert res['t'].shape[0] == ts.shape[0] - 1
-        return res
+        return res, adj_0_norm
