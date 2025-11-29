@@ -115,7 +115,7 @@ class AMDataset(Dataset):
         self.alpha_dot = solver_info['alpha_dot']# (T,)
         self.traj_g = solver_info['traj_graph'] # list of dgl graphs (T,)
         self.traj_adj = solver_info['traj_adj'] # list of dicts with {x, a, c, e} each (T,)
-        self.traj_v_base = solver_info['traj_v_pred'] # list of dicts with {x, a, c, e} each (T,)
+        self.traj_v_base = solver_info['traj_v_base'] # list of dicts with {x, a, c, e} each (T,)
 
         self.T = self.t.size(0) # T = number of time steps
         self.bs = 1 # len(self.traj_g[0].batch_num_nodes())
@@ -306,6 +306,7 @@ class AdjointMatchingFinetuningTrainerFlowMol:
         solver = LeanAdjointSolverFlow(self.base_model, self.grad_reward_fn)
 
         iterations = self.sampling_config.num_samples // self.config.batch_size
+        avg_adj_0_norm = 0.0
         for i in range(iterations):
             with torch.no_grad():
                 while True:
@@ -332,17 +333,19 @@ class AdjointMatchingFinetuningTrainerFlowMol:
                 sigmas = sigmas[:cutoff_idx] # sigmas has one less entry than ts
 
             # graph_trajectories is a list of the intermediate graphs
-            solver_info = solver.solve(graph_trajectories=graph_trajectories, ts=ts)
+            solver_info, adj_0_norm = solver.solve(graph_trajectories=graph_trajectories, ts=ts)
             # add sigma_t to solver_info
             solver_info['sigma_t'] = sigmas
             
             dataset = AMDataset(solver_info=solver_info)
             datasets.append(dataset)
+            avg_adj_0_norm += adj_0_norm
 
         if len(datasets) == 0:
-            return None
+            return None, None
+        avg_adj_0_norm /= len(datasets)
         dataset = ConcatDataset(datasets)
-        return dataset
+        return dataset, avg_adj_0_norm
 
     def push_to_device(self, sample):
         for key, value in sample.items():
@@ -399,7 +402,7 @@ class AdjointMatchingFinetuningTrainerFlowMol:
                 alpha_dot = alpha_dot_t, 
                 dt = dt,
                 upper_edge_mask = g_base_t.edata['ue_mask'],
-                calc_adj=False
+                calc_adj = False,
             )
             
             v_base.append(v_base_t)
@@ -436,47 +439,29 @@ class AdjointMatchingFinetuningTrainerFlowMol:
         # self.fine_model.zero_grad()
         loss.backward(retain_graph=False)
 
+        # Compute L2 norm BEFORE clipping
+        grads = []
+        for p in self.fine_model.parameters():
+            if p.grad is not None:
+                grads.append(p.grad.view(-1))
+        grad_vec = torch.cat(grads)
+        grad_norm = grad_vec.norm(2)
         if self.verbose:
-            # ---- GRADIENT ANALYSIS ----
-            # Collect all gradients into a single flat vector (before clipping)
-            grads_before = []
-            for p in self.fine_model.parameters():
-                if p.grad is not None:
-                    grads_before.append(p.grad.view(-1))
-            grad_before_vec = torch.cat(grads_before)
+            print(f"Gradient L2 norm before clipping: {grad_norm.item():.6f}")
 
-            # Compute L2 norm BEFORE clipping
-            grad_norm_before = grad_before_vec.norm(2).item()
-            print(f"Gradient L2 norm before clipping: {grad_norm_before:.6f}")
-
-            # 3. Clip gradients (optionally)
-            if self.clip_grad_norm > 0.0:
-                torch.nn.utils.clip_grad_norm_(self.fine_model.parameters(), self.clip_grad_norm)
-
-            # Collect gradients again (AFTER clipping)
-            grads_after = []
-            for p in self.fine_model.parameters():
-                if p.grad is not None:
-                    grads_after.append(p.grad.view(-1))
-            grad_after_vec = torch.cat(grads_after)
-
-            # Compute L2 norm AFTER clipping
-            grad_norm_after = grad_after_vec.norm(2).item()
-            print(f"Gradient L2 norm after clipping:  {grad_norm_after:.6f}")
-            # ---- END GRADIENT ANALYSIS ----
-
-        else:
-            if self.clip_grad_norm > 0.0:
-                torch.nn.utils.clip_grad_norm_(self.fine_model.parameters(), self.clip_grad_norm)
+        # Clip gradients (optionally)
+        if self.clip_grad_norm > 0.0:
+            torch.nn.utils.clip_grad_norm_(self.fine_model.parameters(), self.clip_grad_norm)
 
         self.optimizer.step()
 
-        return loss
+        return loss.item(), grad_norm.item()
 
     def finetune(self, dataset, steps=None):
         """Finetuning the model."""
         c = 0
         total_loss = 0
+        total_grad_norm = 0
 
         self.fine_model.to(self.device)
         self.fine_model.train()
@@ -491,10 +476,10 @@ class AdjointMatchingFinetuningTrainerFlowMol:
         
         for idx in idxs:
             sample = dataset[idx]
-            loss = self.train_step(sample).item()
+            loss, grad_norm = self.train_step(sample)
             total_loss = total_loss + loss
+            total_grad_norm = total_grad_norm + grad_norm
             c+=1 
 
         del dataset
-        return total_loss / c
-
+        return total_loss / c, total_grad_norm / c
