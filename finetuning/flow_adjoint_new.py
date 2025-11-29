@@ -453,7 +453,7 @@ class AdjointMatchingFinetuningTrainerFlowMolNew:
 
         return loss.item(), grad_norm.item()
 
-    def finetune(self, dataset):
+    def finetune(self):
         """Finetuning the model."""
 
         counter = 0

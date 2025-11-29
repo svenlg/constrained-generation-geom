@@ -319,7 +319,7 @@ def main():
             # Fine-tune the model 
             # 1. Generate the dataset 
             # 2. Update with adjoint matching loss
-            loss, grad_norm, adj_0_norm = trainer.finetune(dataset)
+            loss, grad_norm, adj_0_norm = trainer.finetune()
             
             total_steps_made += 1
             if total_steps_made % plotting_freq == 0:
