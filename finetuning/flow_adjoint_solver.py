@@ -105,8 +105,8 @@ class LeanAdjointSolverFlow:
             g_t = graph_trajectories[i]
             alpha = alpha_s[i]
             alpha_dot = alpha_dot_s[i]
-            # v_base, adj = step(
-            adj, v_base = step(
+            # adj, v_base_t = step(
+            v_base_t, adj = step(
                 model = self.model,
                 adj = adj, 
                 g_t = g_t, 
@@ -118,7 +118,7 @@ class LeanAdjointSolverFlow:
                 calc_adj=True
             )
             trajs_adj.append(adj)
-            traj_v_base.append(v_base)
+            traj_v_base.append(v_base_t)
         
         res = {
             't': ts[1:], # (T,)

@@ -225,7 +225,6 @@ def main():
     # Initialize lists to store loss and rewards
     al_stats = []
     full_stats = []
-    al_best_reward = -1e8
     al_best_epoch = 0
     if args.save_samples:
         from dgl import save_graphs
@@ -277,7 +276,6 @@ def main():
         logs = {}
         logs.update(tmp_log)
         logs.update(log_pred_vs_real)
-        logs.update({"total_best_reward": al_best_reward})
         log = alm.get_statistics()
         logs.update(log) # lambda, rho, expected_constraint
         wandb.log(logs)
@@ -367,7 +365,6 @@ def main():
                 if am_stats[-1]["total_reward"] > am_best_total_reward:
                     am_best_total_reward = am_stats[-1]["total_reward"]
                     am_best_iteration = i
-                tmp_log["total_best_reward"] = am_best_total_reward                
                 
                 if use_wandb:
                     logs = {}
