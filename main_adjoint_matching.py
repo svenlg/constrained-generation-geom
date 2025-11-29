@@ -27,25 +27,6 @@ def setup_gen_model(flow_model: str, device: torch.device):
     gen_model.to(device)
     return gen_model
 
-# Setup PAMNet
-def setup_pamnet_model(config: OmegaConf, device: torch.device):
-    from PAMNet.models import PAMNet_s, Config
-    abs_path = os.getcwd()
-    path = osp.join(abs_path, 'pretrained_models', config.type, config.dataset, config.date)
-    tmp_config = OmegaConf.load(path + '/config.yaml')
-    pamnet_config = Config(
-        dataset = tmp_config.dataset,
-        dim = tmp_config.dim,
-        n_layer = tmp_config.n_layer,
-        cutoff_l = tmp_config.cutoff_l,
-        cutoff_g = tmp_config.cutoff_g,
-    )
-    reward_model = PAMNet_s(pamnet_config)
-    reward_model.load_state_dict(torch.load(path + '/model.pth', map_location='cpu'))
-    reward_model.to(device)
-    reward_model.eval()
-    return reward_model
-
 # Sampling
 def sampling(config: OmegaConf, model: flowmol.FlowMol, device: torch.device):
     model.to(device)
@@ -142,18 +123,12 @@ def main():
     # Setup - Gen Model
     gen_model = setup_gen_model(config.flow_model, device=device)
 
-    # Setup - Reward and Gradient Functions
-    if reward == "sascore":
-        reward_model = setup_pamnet_model(config.pamnet, device=device)
-    else:
-        reward_model = None
-
     def reward_fn(molecules):
         return compute_property_stats(
             molecules = molecules,
             property = reward,
             device = device,
-            model = reward_model,
+            model = None,
         )
 
     def grad_reward_fn(molecules):
@@ -163,7 +138,7 @@ def main():
                 property = reward,
                 reward_lambda = reward_lambda,
                 device = device,
-                model = reward_model,
+                model = None,
             )
             return grads
 
