@@ -124,8 +124,6 @@ def main():
     # Adjoint Matching Parameters
     reward_lambda = config.reward_lambda
     config.adjoint_matching.reward_lambda = reward_lambda
-    traj_len = config.adjoint_matching.sampling.num_integration_steps
-    finetune_steps = config.adjoint_matching.sampling.num_samples // config.adjoint_matching.batch_size
 
     num_iterations = config.total_steps // lagrangian_updates
     plotting_freq = 3 if args.plotting_freq is None else args.plotting_freq
@@ -155,7 +153,6 @@ def main():
         config.adjoint_matching.sampling.num_samples = 20 if torch.cuda.is_available() else 4
         config.adjoint_matching.batch_size = 5 if torch.cuda.is_available() else 2
         config.reward_sampling.num_samples = 8
-        finetune_steps = config.adjoint_matching.sampling.num_samples // config.adjoint_matching.batch_size
         plotting_freq = 1
         args.save_samples = False
         num_iterations = 2
@@ -196,7 +193,6 @@ def main():
     print(f"\tbatch_size: {config.adjoint_matching.batch_size}", flush=True)
     print(f"\tsampling.num_samples: {config.adjoint_matching.sampling.num_samples}", flush=True)
     print(f"\tsampling.num_integration_steps: {config.adjoint_matching.sampling.num_integration_steps}", flush=True)
-    print(f"\tfinetune_steps: {finetune_steps}", flush=True)
     print(f"\tnum_iterations: {num_iterations}", flush=True)
     if "features" in config.adjoint_matching:
         print(f"\tfeatures: {config.adjoint_matching.features}", flush=True)
@@ -327,7 +323,7 @@ def main():
                 continue
 
             # Fine-tune the model with adjoint matching loss
-            loss, grad_norm = trainer.finetune(dataset, steps=finetune_steps)
+            loss, grad_norm = trainer.finetune(dataset)
             del dataset
             
             total_steps_made += 1
