@@ -1,2 +1,3 @@
 from .alm import AugmentedLagrangian
 from .flow_adjoint import AdjointMatchingFinetuningTrainerFlowMol
+from .flow_adjoint_new import AdjointMatchingFinetuningTrainerFlowMolNew
