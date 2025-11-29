@@ -822,13 +822,8 @@ python utils/plots_sweeps.py \
 
 """Example usage:
     python utils/plots_sweeps.py \
-    --sweeps_to_plot am_rl_50,am_rl_25,am_rl_1 \
-    --output_name am_rl \
+    --sweeps_to_plot cfo_num_constraint_estimation_samples \
     --use_cfo_color \
-    --am_reward_mean 8.304 \
-    --am_reward_std 0.073 \
-    --am_constraint_mean -78.311 \
-    --am_constraint_std 0.377 \
     --bound -80 \
     --plot_pre \
     --safe_fig
