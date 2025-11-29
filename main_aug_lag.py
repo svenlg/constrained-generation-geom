@@ -322,14 +322,14 @@ def main():
         # Run finetuning loop
         for i in range(1, num_iterations + 1):
             # Solves lean adjoint ODE to create dataset
-            dataset = trainer.generate_dataset()
+            dataset, avg_adj_0_norm = trainer.generate_dataset()
             
             if dataset is None:
                 print("Dataset is None, skipping iteration", flush=True)
                 continue
 
             # Fine-tune the model with adjoint matching loss
-            loss = trainer.finetune(dataset, steps=finetune_steps)
+            loss, grad_norm = trainer.finetune(dataset, steps=finetune_steps)
             del dataset
             
             total_steps_made += 1
@@ -357,7 +357,10 @@ def main():
                 pred_rc = augmented_reward.get_reward_constraint()
                 log_pred_vs_real, _, _ = pred_vs_real(rd_mols, dgl_mols, pred_rc, reward=config.reward.fn, constraint=config.constraint.fn)
                 tmp_log = augmented_reward.get_statistics()
-                tmp_log["loss"] = loss/reward_lambda/(traj_len//2)
+                tmp_log["adj_0_norm"] = avg_adj_0_norm
+                tmp_log["loss"] = loss # /reward_lambda/(traj_len//2)
+                tmp_log["loss_re_weighted"] = loss/(reward_lambda**2)
+                tmp_log["grad_norm"] = grad_norm
                 tmp_log.update(log_pred_vs_real)
                 am_stats.append(tmp_log)
 
@@ -421,7 +424,8 @@ def main():
     if use_wandb:
         wandb.finish()
 
-    full_stats[0]['loss'] = full_stats[1]['loss']
+    for feat in ['loss', 'grad_norm', 'adj_0_norm']:
+        full_stats[0][feat] = full_stats[1][feat]
     df_al = pd.DataFrame.from_records(full_stats)
     df_alm = pd.DataFrame.from_dict(al_stats)
     
@@ -437,8 +441,8 @@ def main():
         try:
             from utils.plotting import plot_graphs
             # Plot rewards and constraints
-            tmp_data = [df_al['total_reward'], df_al['reward'], df_al['constraint'], df_al['constraint_violations'], df_al['loss']]
-            tmp_titles = ["Total Reward", "Reward", "Constraint", "Constraint Violations", "Loss"]
+            tmp_data = [df_al['total_reward'], df_al['reward'], df_al['constraint'], df_al['constraint_violations']]
+            tmp_titles = ["Total Reward", "Reward", "Constraint", "Constraint Violations"]
             plot_graphs(tmp_data, tmp_titles, save_path=save_path / Path("full_stats.png"), save_freq=plotting_freq)
             # Plot lambda, rho and expected constraint
             tmp_data = [df_alm["alm/lambda"], df_alm["alm/rho"], df_alm["alm/expected_constraint"]]
