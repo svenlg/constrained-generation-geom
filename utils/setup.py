@@ -68,8 +68,6 @@ def parse_arguments():
                         help="Override adjoint_matching.num_samples in config")
     parser.add_argument("--num_integration_steps", type=int,
                         help="Override adjoint_matching.num_integration_steps in config")
-    parser.add_argument("--finetune_steps", type=int,
-                        help="Override adjoint_matching.finetune_steps in config")
     parser.add_argument("--num_iterations", type=int,
                         help="Override number of iterations")
     # Number of Atoms per Molecule
@@ -148,8 +146,6 @@ def update_config_with_args(config, args):
         config.adjoint_matching.sampling.num_samples = args.samples_per_update
     if args.num_integration_steps is not None:
         config.adjoint_matching.sampling.num_integration_steps = args.num_integration_steps
-    if args.finetune_steps is not None:
-        config.adjoint_matching.finetune_steps = args.finetune_steps
     if args.num_iterations is not None:
         config.adjoint_matching.num_iterations = args.num_iterations
     # Number of atoms
